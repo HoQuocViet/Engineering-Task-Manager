@@ -1,4 +1,4 @@
-import { Task, Package, Category, Tag, User, Project, DashboardStats, TaskFilterOptions, OutlookEvent, OutlookConfigStatus } from '../types';
+import { Task, Package, Category, Tag, User, Project, DashboardStats, TaskFilterOptions, OutlookEvent, OutlookConfigStatus, PicMember } from '../types';
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -278,6 +278,37 @@ export const api = {
 
   deleteTag: async (id: string): Promise<{ message: string }> => {
     const res = await fetch(`/api/tags/${id}`, {
+      method: 'DELETE',
+    });
+    return handleResponse(res);
+  },
+
+  // PICs (Persons In Charge)
+  getPics: async (): Promise<PicMember[]> => {
+    const res = await fetch('/api/pics');
+    return handleResponse(res);
+  },
+
+  createPic: async (data: Partial<PicMember>): Promise<PicMember> => {
+    const res = await fetch('/api/pics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(res);
+  },
+
+  updatePic: async (id: string, data: Partial<PicMember>): Promise<PicMember> => {
+    const res = await fetch(`/api/pics/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(res);
+  },
+
+  deletePic: async (id: string): Promise<{ message: string; id: string }> => {
+    const res = await fetch(`/api/pics/${id}`, {
       method: 'DELETE',
     });
     return handleResponse(res);

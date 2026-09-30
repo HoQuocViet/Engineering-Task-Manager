@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { User, Project, Package, Category, Tag, Task, WorkspaceBranding, AISettings, DEFAULT_QUICK_PROMPTS, ThemeMode } from '../types';
+import { User, Project, Package, Category, Tag, Task, WorkspaceBranding, AISettings, DEFAULT_QUICK_PROMPTS, ThemeMode, PicMember } from '../types';
 import { api } from '../lib/api';
 
 export type ActiveView = 
@@ -51,6 +51,8 @@ interface AppContextType {
   generalPackage: Package | null;
   categories: Category[];
   tags: Tag[];
+  pics: PicMember[];
+  createPicInline: (name: string, role?: string, avatar?: string) => Promise<PicMember>;
   totalTasksCount: number;
   dataVersion: number;
   refreshData: () => Promise<void>;
@@ -103,6 +105,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [generalPackage, setGeneralPackage] = useState<Package | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
+  const [pics, setPics] = useState<PicMember[]>([]);
   const [totalTasksCount, setTotalTasksCount] = useState<number>(0);
   const [dataVersion, setDataVersion] = useState<number>(0);
   const [selectedTaskId, setSelectedTaskIdState] = useState<string | null>(null);
@@ -280,13 +283,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const refreshData = useCallback(async () => {
     try {
-      const [usersData, projectsData, packagesData, categoriesData, tagsData, tasksData] = await Promise.all([
+      const [usersData, projectsData, packagesData, categoriesData, tagsData, tasksData, picsData] = await Promise.all([
         api.getUsers(),
         api.getProjects(),
         api.getPackages(),
         api.getCategories(),
         api.getTags(),
         api.getTasks({ limit: 1 }),
+        api.getPics(),
       ]);
 
       setUsers(usersData);
@@ -295,6 +299,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setGeneralPackage(packagesData.general);
       setCategories(categoriesData);
       setTags(tagsData);
+      setPics(picsData);
       setTotalTasksCount(tasksData?.total ?? 0);
       setDataVersion((v) => v + 1);
 
@@ -304,6 +309,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch (err) {
       console.error('Failed to load initial application metadata:', err);
     }
+  }, []);
+
+  const createPicInline = useCallback(async (name: string, role = '', avatar = ''): Promise<PicMember> => {
+    const newPic = await api.createPic({ name, role, avatar });
+    setPics((prev) => {
+      const exists = prev.some((p) => p.name.toLowerCase() === newPic.name.toLowerCase());
+      if (exists) {
+        return prev.map((p) => (p.name.toLowerCase() === newPic.name.toLowerCase() ? { ...p, ...newPic } : p));
+      }
+      return [...prev, newPic];
+    });
+    return newPic;
   }, []);
 
   useEffect(() => {
@@ -330,6 +347,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         generalPackage,
         categories,
         tags,
+        pics,
+        createPicInline,
         totalTasksCount,
         dataVersion,
         refreshData,

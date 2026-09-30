@@ -15,6 +15,7 @@ import attachmentsRouter from './server/routes/attachments.js';
 import systemRouter from './server/routes/system.js';
 import aiRouter from './server/routes/ai.js';
 import outlookRouter from './server/routes/outlook.js';
+import picsRouter from './server/routes/pics.js';
 
 async function startServer() {
   const app = express();
@@ -55,6 +56,7 @@ async function startServer() {
   app.use('/api/ai', aiRouter);
   app.use('/api/outlook', outlookRouter);
   app.use('/api/auth/outlook', outlookRouter);
+  app.use('/api/pics', picsRouter);
 
   // Vite middleware for development vs Static files for production
   if (process.env.NODE_ENV !== 'production') {

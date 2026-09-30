@@ -199,6 +199,7 @@ function initSchema(database: Database): void {
       forecast_finish TEXT,
       completed_date TEXT,
       assignee_id TEXT,
+      pics TEXT,
       group_id TEXT,
       forecast_revision_count INTEGER DEFAULT 0,
       created_at TEXT NOT NULL,
@@ -288,6 +289,14 @@ function initSchema(database: Database): void {
       web_link TEXT,
       synced_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS pics (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      role TEXT DEFAULT '',
+      avatar TEXT DEFAULT '',
+      created_at TEXT NOT NULL
+    );
   `);
 
   // 2. Safe schema migrations for existing pre-created database tables
@@ -307,6 +316,7 @@ function initSchema(database: Database): void {
   try { database.run('ALTER TABLE tasks ADD COLUMN completed_date TEXT;'); } catch (e) {}
   try { database.run('ALTER TABLE tasks ADD COLUMN group_id TEXT;'); } catch (e) {}
   try { database.run('ALTER TABLE tasks ADD COLUMN forecast_revision_count INTEGER DEFAULT 0;'); } catch (e) {}
+  try { database.run('ALTER TABLE tasks ADD COLUMN pics TEXT;'); } catch (e) {}
   try {
     database.run(`
       UPDATE tasks 
@@ -354,6 +364,40 @@ function initSchema(database: Database): void {
     }
   } catch (err) {
     console.error('Error ensuring outlook_config:', err);
+  }
+
+  // 5. Seed default PICs (Persons In Charge) if empty
+  try {
+    const checkStmt = database.prepare('SELECT COUNT(*) as count FROM pics');
+    let picCount = 0;
+    if (checkStmt.step()) {
+      const obj = checkStmt.getAsObject() as any;
+      picCount = Number(obj.count || 0);
+    }
+    checkStmt.free();
+
+    if (picCount === 0) {
+      const now = new Date().toISOString();
+      const defaultPics = [
+        { id: 'pic-1', name: 'Ho Quoc Viet (Tôi)', role: 'Project Manager / Lead Engineer' },
+        { id: 'pic-2', name: 'Nguyen Van An', role: 'Senior Piping Engineer' },
+        { id: 'pic-3', name: 'Tran Minh Duc', role: 'Structural Engineer' },
+        { id: 'pic-4', name: 'Le Thi Mai', role: 'Lead Document Controller' },
+        { id: 'pic-5', name: 'Pham Hoang Nam', role: 'Electrical & Instrumentation Lead' },
+        { id: 'pic-6', name: 'Vu Quoc Bao', role: 'QA/QC & HSE Lead Inspector' },
+        { id: 'pic-7', name: 'Doan Tan Phat', role: 'Lead Commissioning Engineer' },
+        { id: 'pic-8', name: 'Bui Anh Tuan', role: 'Senior Procurement Specialist' },
+      ];
+
+      for (const p of defaultPics) {
+        database.run(
+          'INSERT OR IGNORE INTO pics (id, name, role, avatar, created_at) VALUES (?, ?, ?, ?, ?)',
+          [p.id, p.name, p.role, '', now]
+        );
+      }
+    }
+  } catch (err) {
+    console.error('Error ensuring default pics:', err);
   }
 }
 

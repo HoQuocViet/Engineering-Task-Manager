@@ -670,32 +670,31 @@ router.post('/reword-description', async (req: Request, res: Response) => {
       });
     }
 
-    const rewordSystemInstruction = `You are a Senior Principal Discipline Engineer and Technical Lead in Offshore Oil & Gas and EPCI facilities (PetroVietnam / PTSC, TechnipFMC, McDermott, Saipem standards).
-Your task is to reword, formalize, and elevate the user's draft technical description into an authoritative, professional, and technically rigorous Oil & Gas engineering description.
+    const isVietnamese =
+      /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(trimmedDraft) ||
+      /\b(kiem tra|ra soat|gia cong|lap dat|tuyen ong|ban ve|du an|cong viec|hoan thanh|bao cao|nghiem thu)\b/i.test(trimmedDraft);
 
-CORE GUIDELINES:
-1. OIL & GAS DOMAIN PRECISION:
-   - Use precise Oil & Gas EPCI industry terminology (e.g. ASME B31.3 / B31.4 / B31.8, API 6A / 6D / 598 / 650 / 610, AWS D1.1, DNV-OS-F101 / DNV-GL, NACE MR0175, P&ID, PFD, HAZOP / SIL, MTO, Datasheet, FAT / SAT / EFAT, Hydrotest, NDT RT/UT/MPI, QA/QC ITP, WPS/PQR, Punch List, Subsea / Topsides).
-   - Maintain all equipment tag numbers, design pressures, temperatures, metallurgy/piping classes, and deliverable numbers mentioned in the draft.
-2. ACTION-ORIENTED & STRUCTURED:
-   - Start actions with clear engineering verbs (e.g., Perform, Verify, Conduct, Inspect, Issue, Coordinate, Fabricate, Calculate, Align, Expedite).
-   - Use clean, structured sections or bullet points if the scope covers multiple deliverables (e.g., Scope of Work, Technical Requirements, Deliverables / Verification).
-3. CLEAN DIRECT OUTPUT:
-   - Output ONLY the reworded engineering technical description text directly.
-   - Do NOT include markdown code fences (\`\`\`) enclosing the entire text.
-   - Do NOT include conversational greetings (e.g., "Here is the reworded description:", "Sure, as an engineer...").
-4. LANGUAGE: Deliver purely in professional English.`;
+    const rewordSystemInstruction = `You are a concise technical editor for an Engineering Task Management System.
+Your job is to rewrite raw technical notes into a SHORT, CRISP, and CLEAR task description that anyone can understand immediately.
 
-    const userPrompt = `TASK CONTEXT:
-Task Title: ${taskTitle || 'Not specified'}
-Discipline / Package: ${discipline || packageCode || 'Offshore Oil & Gas / EPCI'}
+STRICT LENGTH & FORMAT RULES:
+- Length: Strictly 25 to 55 words total (either 2 to 3 short bullet points OR 1 brief paragraph).
+- NEVER generate long essays, Roman numerals (I, II, III), or sections like "1. Scope of Work", "2. Deliverables".
+- Cut out all unnecessary filler, preamble, or repetition.
+- Preserve equipment tags, drawing numbers, pressure/temperature numbers, and code standards (ASME, API, AWS, etc.) from the draft.
+- Direct output only: no conversational intro, no markdown code block (\`\`\`).
 
-USER'S DRAFT TECHNICAL DESCRIPTION:
-"""
-${trimmedDraft}
-"""
+LANGUAGE REQUIREMENT:
+${isVietnamese
+  ? '- Output MUST be written purely in clear, natural, concise VIETNAMESE (tiếng Việt ngắn gọn, rành mạch, chuẩn kỹ thuật, dễ hiểu).'
+  : '- Output MUST be written purely in clear, natural, concise ENGLISH.'}`;
 
-Please reword and elevate the draft description above into a rigorous, professional Oil & Gas engineering Technical Description / Scope of Work.`;
+    const userPrompt = `DRAFT NOTES:
+"${trimmedDraft}"
+${taskTitle ? `Task Title: "${taskTitle}"` : ''}
+
+Instruction: Rewrite the draft above into a concise, easily understood description (strictly 25-50 words, 2-3 bullets or 1 short paragraph).
+Output in ${isVietnamese ? 'VIETNAMESE' : 'ENGLISH'}.`;
 
     // Handle CLAUDE
     if (provider === 'claude') {
@@ -716,10 +715,10 @@ Please reword and elevate the draft description above into a rigorous, professio
             },
             body: JSON.stringify({
               model: m,
-              max_tokens: 2048,
+              max_tokens: 220,
               system: rewordSystemInstruction,
               messages: [{ role: 'user', content: userPrompt }],
-              temperature: 0.25,
+              temperature: 0.2,
             }),
           });
 
@@ -773,7 +772,8 @@ Please reword and elevate the draft description above into a rigorous, professio
           contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
           config: {
             systemInstruction: rewordSystemInstruction,
-            temperature: 0.25,
+            temperature: 0.2,
+            maxOutputTokens: 200,
           },
         });
         const text = response.text || '';

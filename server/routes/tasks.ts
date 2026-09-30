@@ -95,10 +95,17 @@ router.get('/', (req: Request, res: Response) => {
       params.push(type);
     }
 
-    // Assignee filter
+    // Assignee / PIC filter
     if (assigneeId && typeof assigneeId === 'string' && assigneeId !== 'ALL') {
       whereClauses.push('t.assignee_id = ?');
       params.push(assigneeId);
+    }
+
+    const rawPic = (req.query.pic as string) || '';
+    if (rawPic && rawPic !== 'ALL') {
+      const cleanPic = rawPic.replace(/\s*\(Tôi\)\s*$/, '').trim();
+      whereClauses.push('(t.pics LIKE ? OR u.name LIKE ?)');
+      params.push(`%${cleanPic}%`, `%${cleanPic}%`);
     }
 
     // Tag filter
@@ -311,6 +318,20 @@ router.get('/', (req: Request, res: Response) => {
       }
     }
 
+    // Ensure pics is always an array
+    for (const t of tasks) {
+      if (typeof t.pics === 'string') {
+        try {
+          t.pics = JSON.parse(t.pics);
+        } catch {
+          t.pics = t.pics.split(',').map((s: string) => s.trim()).filter(Boolean);
+        }
+      }
+      if (!Array.isArray(t.pics)) {
+        t.pics = [];
+      }
+    }
+
     res.json({
       tasks,
       total,
@@ -412,6 +433,17 @@ router.get('/:id', (req: Request, res: Response) => {
       task.linked_tasks_count = 0;
     }
 
+    if (typeof task.pics === 'string') {
+      try {
+        task.pics = JSON.parse(task.pics);
+      } catch {
+        task.pics = task.pics.split(',').map((s: string) => s.trim()).filter(Boolean);
+      }
+    }
+    if (!Array.isArray(task.pics)) {
+      task.pics = [];
+    }
+
     res.json(task);
   } catch (err: any) {
     console.error('Error getting task details:', err);
@@ -491,6 +523,11 @@ router.post('/', (req: Request, res: Response) => {
       }
     }
 
+    const rawPics = req.body.pics;
+    const finalPics = Array.isArray(rawPics)
+      ? JSON.stringify(rawPics)
+      : JSON.stringify([]);
+
     // If multi-target batch creation:
     if (targetItems.length > 0) {
       const generatedGroupId = group_id || `grp-${crypto.randomUUID().slice(0, 10)}`;
@@ -501,9 +538,9 @@ router.post('/', (req: Request, res: Response) => {
         run(`
           INSERT INTO tasks (
             id, project_id, title, description, type, category_id, package_id, priority, status,
-            progress, start_date, deadline, forecast_finish, completed_date, assignee_id, group_id,
+            progress, start_date, deadline, forecast_finish, completed_date, assignee_id, pics, group_id,
             created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
           taskId,
           item.projectId,
@@ -520,6 +557,7 @@ router.post('/', (req: Request, res: Response) => {
           rawForecastFinish || null,
           completedDate,
           rawAssigneeId || null,
+          finalPics,
           generatedGroupId,
           now,
           now,
@@ -565,9 +603,9 @@ router.post('/', (req: Request, res: Response) => {
     run(`
       INSERT INTO tasks (
         id, project_id, title, description, type, category_id, package_id, priority, status,
-        progress, start_date, deadline, forecast_finish, completed_date, assignee_id, group_id,
+        progress, start_date, deadline, forecast_finish, completed_date, assignee_id, pics, group_id,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       taskId,
       targetProjectId,
@@ -584,6 +622,7 @@ router.post('/', (req: Request, res: Response) => {
       rawForecastFinish || null,
       completedDate,
       rawAssigneeId || null,
+      finalPics,
       group_id || null,
       now,
       now,
@@ -804,6 +843,7 @@ router.put('/:id', (req: Request, res: Response) => {
         forecast_revision_count = ?,
         completed_date = ?,
         assignee_id = ?,
+        pics = ?,
         updated_at = ?
       WHERE id = ?
     `, [
@@ -822,6 +862,9 @@ router.put('/:id', (req: Request, res: Response) => {
       effectiveForecastRevisionCount,
       effectiveCompletedDate,
       rawAssigneeId !== undefined ? (rawAssigneeId || null) : existing.assignee_id,
+      req.body.pics !== undefined
+        ? (Array.isArray(req.body.pics) ? JSON.stringify(req.body.pics) : String(req.body.pics))
+        : existing.pics,
       now,
       id,
     ]);
@@ -860,8 +903,12 @@ router.put('/:id', (req: Request, res: Response) => {
       const sharedCategoryId = rawCategoryId !== undefined ? (rawCategoryId || null) : existing.category_id;
       const sharedPriority = priority !== undefined ? priority : existing.priority;
 
-      // 1. Sync common fields to all sibling tasks in this group (Title, Description, Type, Category, Priority)
+      // 1. Sync common fields to all sibling tasks in this group (Title, Description, Type, Category, Priority, PICs)
       if (syncGroup) {
+        const sharedPics = req.body.pics !== undefined
+          ? (Array.isArray(req.body.pics) ? JSON.stringify(req.body.pics) : String(req.body.pics))
+          : null;
+
         run(`
           UPDATE tasks SET
             title = ?,
@@ -869,6 +916,7 @@ router.put('/:id', (req: Request, res: Response) => {
             type = ?,
             category_id = ?,
             priority = ?,
+            pics = COALESCE(?, pics),
             updated_at = ?
           WHERE group_id = ? AND id != ?
         `, [
@@ -877,6 +925,7 @@ router.put('/:id', (req: Request, res: Response) => {
           sharedType,
           sharedCategoryId,
           sharedPriority,
+          sharedPics,
           now,
           activeGroupId,
           id,

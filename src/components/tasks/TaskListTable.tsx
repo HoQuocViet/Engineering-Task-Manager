@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Task, TaskPriority, TaskStatus } from '../../types';
+import { Task, TaskPriority, TaskStatus, DEFAULT_PRESET_PICS } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { getDeadlineBadge, getScheduleVariance, formatDateDisplay, formatDateDdMmYyyy } from '../../lib/dateUtils';
 import {
@@ -22,6 +22,9 @@ import {
   Filter,
   Link2,
   Search,
+  Users,
+  UserCheck,
+  Plus,
 } from 'lucide-react';
 
 interface TaskListTableProps {
@@ -31,7 +34,8 @@ interface TaskListTableProps {
   onSelectAll: (selectAll: boolean) => void;
   onQuickStatusChange: (id: string, status: TaskStatus) => void;
   onQuickPriorityChange?: (id: string, priority: TaskPriority) => void;
-  onQuickProgressChange: (id: string, progress: number) => void;
+  onQuickProgressChange?: (id: string, progress: number) => void;
+  onQuickPicsChange?: (id: string, pics: string[]) => void;
   onDeleteTask?: (id: string) => void;
   onSortChange?: (field: string) => void;
   currentSort?: string;
@@ -50,57 +54,225 @@ interface TaskListTableProps {
   onForecastFilterChange?: (val: string) => void;
   progressFilter?: string;
   onProgressFilterChange?: (val: string) => void;
+  picFilter?: string;
+  onPicFilterChange?: (val: string) => void;
   onResetColumnFilters?: () => void;
   hideFilterRow?: boolean;
   emptyMessage?: string;
 }
 
-const InlineProgressSlider: React.FC<{
+const InlinePicSelector: React.FC<{
   taskId: string;
-  initialProgress: number;
-  isDone: boolean;
-  onCommit: (taskId: string, progress: number) => void;
-}> = ({ taskId, initialProgress, isDone, onCommit }) => {
-  const [val, setVal] = useState(initialProgress);
+  pics: string[];
+  presetPics: string[];
+  onCommit: (taskId: string, pics: string[]) => void;
+}> = ({ taskId, pics = [], presetPics, onCommit }) => {
+  const { pics: registeredPics, createPicInline } = useApp();
+  const [isOpen, setIsOpen] = useState(false);
+  const [selected, setSelected] = useState<string[]>(pics);
+  const [customName, setCustomName] = useState('');
+  const popoverRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setVal(initialProgress);
-  }, [initialProgress]);
+    setSelected(pics);
+  }, [pics]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setVal(Number(e.target.value));
-  };
-
-  const handleCommit = (newVal: number) => {
-    const clamped = Math.min(100, Math.max(0, newVal));
-    setVal(clamped);
-    if (clamped !== initialProgress) {
-      onCommit(taskId, clamped);
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
     }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen]);
+
+  const togglePic = (name: string) => {
+    let next: string[];
+    if (selected.includes(name)) {
+      next = selected.filter((p) => p !== name);
+    } else {
+      next = [...selected, name];
+    }
+    setSelected(next);
+    onCommit(taskId, next);
   };
+
+  const handleAddCustom = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customName.trim()) return;
+    const name = customName.trim();
+    try {
+      if (createPicInline) {
+        await createPicInline(name, 'Project Team Member');
+      }
+    } catch (err) {
+      console.error('Error creating PIC inline:', err);
+    }
+    if (!selected.includes(name)) {
+      const next = [...selected, name];
+      setSelected(next);
+      onCommit(taskId, next);
+    }
+    setCustomName('');
+  };
+
+  const getInitials = (n: string) => {
+    const clean = n.replace(/\s*\(Tôi\)\s*$/, '').trim();
+    const parts = clean.split(/\s+/);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  };
+
+  const allAvailableList = React.useMemo(() => {
+    const list: string[] = [];
+    if (Array.isArray(registeredPics)) {
+      for (const p of registeredPics) {
+        if (p.name && !list.includes(p.name)) list.push(p.name);
+      }
+    }
+    for (const p of presetPics) {
+      if (!list.includes(p)) list.push(p);
+    }
+    return list;
+  }, [registeredPics, presetPics]);
 
   return (
-    <div className={`flex items-center space-x-1 ${isDone ? 'opacity-60 grayscale' : ''}`} onClick={(e) => e.stopPropagation()}>
-      <input
-        type="range"
-        min="0"
-        max="100"
-        step="5"
-        value={val}
-        onChange={handleChange}
-        onMouseUp={() => handleCommit(val)}
-        onTouchEnd={() => handleCommit(val)}
-        onKeyUp={(e) => {
-          if (e.key === 'Enter' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-            handleCommit(val);
-          }
-        }}
-        className="w-11 h-1 bg-slate-200 dark:bg-slate-700 rounded appearance-none cursor-pointer accent-slate-400 hover:accent-slate-500 dark:accent-slate-500 shrink-0"
-        title="Drag to change progress"
-      />
-      <span className={`text-[9px] font-mono w-6 text-right font-medium shrink-0 ${isDone ? 'text-slate-400 dark:text-slate-500' : 'text-slate-600 dark:text-slate-400'}`}>
-        {val}%
-      </span>
+    <div className="relative inline-block text-left" ref={popoverRef} onClick={(e) => e.stopPropagation()}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        title={selected.length > 0 ? `PIC: ${selected.join(', ')} (Click to edit)` : 'No PIC assigned (Click to add)'}
+        className="flex items-center justify-center p-0.5 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer group mx-auto"
+      >
+        {selected.length === 0 ? (
+          <span
+            title="No PIC assigned (Click to add)"
+            className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold font-mono border border-dashed border-slate-300 dark:border-slate-700 text-slate-400 dark:text-slate-500 hover:border-blue-400 hover:text-blue-500 transition-colors"
+          >
+            +
+          </span>
+        ) : (
+          <div className="flex items-center -space-x-1.5 overflow-hidden py-0.5 justify-center">
+            {selected.slice(0, 3).map((picName) => {
+              const picRecord = registeredPics?.find((m) => m.name.toLowerCase() === picName.toLowerCase());
+              const isMe = picName.includes('Tôi') || picName.includes('Ho Quoc Viet');
+              if (picRecord?.avatar) {
+                return (
+                  <img
+                    key={picName}
+                    src={picRecord.avatar}
+                    alt={picName}
+                    className="w-5 h-5 rounded-full object-cover ring-1.5 ring-white dark:ring-slate-900 shadow-2xs shrink-0"
+                    title={`${picName}${picRecord.role ? ` (${picRecord.role})` : ''}`}
+                  />
+                );
+              }
+              return (
+                <span
+                  key={picName}
+                  className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[8.5px] font-bold ring-1.5 ring-white dark:ring-slate-900 shadow-2xs font-mono shrink-0 ${
+                    isMe
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200'
+                  }`}
+                  title={`${picName}${picRecord?.role ? ` (${picRecord.role})` : ''}`}
+                >
+                  {getInitials(picName)}
+                </span>
+              );
+            })}
+            {selected.length > 3 && (
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full text-[8px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 ring-1.5 ring-white dark:ring-slate-900 font-mono shrink-0">
+                +{selected.length - 3}
+              </span>
+            )}
+          </div>
+        )}
+      </button>
+
+      {isOpen && (
+        <div className="absolute left-0 top-full mt-1 w-64 z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl p-2.5 space-y-2 text-xs animate-in fade-in duration-100">
+          <div className="flex items-center justify-between pb-1.5 border-b border-slate-100 dark:border-slate-800">
+            <span className="font-bold text-[11px] text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1">
+              <Users className="w-3 h-3 text-blue-600" />
+              <span>Person In Charge</span>
+            </span>
+            <span className="text-[10px] text-slate-400 font-mono">
+              {selected.length} set
+            </span>
+          </div>
+
+          <div className="max-h-48 overflow-y-auto space-y-0.5 pr-1 scrollbar-crystal-dark">
+            {allAvailableList.map((p) => {
+              const isChecked = selected.includes(p);
+              const picRecord = registeredPics?.find((m) => m.name.toLowerCase() === p.toLowerCase());
+              const isMe = p.includes('Tôi') || p.includes('Ho Quoc Viet');
+              return (
+                <label
+                  key={p}
+                  className={`flex items-center justify-between p-1.5 rounded-lg cursor-pointer transition-colors text-xs select-none ${
+                    isChecked
+                      ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-900 dark:text-blue-100 font-semibold'
+                      : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 truncate pr-1 min-w-0">
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => togglePic(p)}
+                      className="rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500 cursor-pointer shrink-0"
+                    />
+                    {picRecord?.avatar ? (
+                      <img src={picRecord.avatar} alt={p} className="w-5 h-5 rounded-full object-cover shrink-0 border border-slate-200 dark:border-slate-700" />
+                    ) : (
+                      <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold font-mono shrink-0 ${
+                        isMe ? 'bg-blue-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200'
+                      }`}>
+                        {getInitials(p)}
+                      </span>
+                    )}
+                    <div className="truncate">
+                      <div className="truncate leading-tight">{p}</div>
+                      {picRecord?.role && (
+                        <div className="text-[10px] text-slate-400 dark:text-slate-500 font-normal truncate leading-tight">
+                          {picRecord.role}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {isMe && (
+                    <span className="text-[9px] bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 px-1 py-0.2 rounded font-bold shrink-0">
+                      TÔI
+                    </span>
+                  )}
+                </label>
+              );
+            })}
+          </div>
+
+          <form onSubmit={handleAddCustom} className="pt-1.5 border-t border-slate-100 dark:border-slate-800 flex gap-1">
+            <input
+              type="text"
+              value={customName}
+              onChange={(e) => setCustomName(e.target.value)}
+              placeholder="Add other person..."
+              className="flex-1 text-[11px] px-2 py-1 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded outline-none focus:border-blue-500"
+            />
+            <button
+              type="submit"
+              disabled={!customName.trim()}
+              className="px-2 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded text-[10px] font-bold disabled:opacity-50 cursor-pointer flex items-center gap-0.5"
+            >
+              <Plus className="w-2.5 h-2.5" />
+              <span>Add</span>
+            </button>
+          </form>
+        </div>
+      )}
     </div>
   );
 };
@@ -113,6 +285,7 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
   onQuickStatusChange,
   onQuickPriorityChange,
   onQuickProgressChange,
+  onQuickPicsChange,
   onDeleteTask,
   onSortChange,
   currentSort,
@@ -130,6 +303,8 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
   onForecastFilterChange,
   progressFilter = 'ALL',
   onProgressFilterChange,
+  picFilter = 'ALL',
+  onPicFilterChange,
   onResetColumnFilters,
   hideFilterRow = false,
   emptyMessage,
@@ -150,7 +325,22 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
     packages,
     categories,
     tags,
+    users,
+    pics,
   } = useApp();
+
+  const combinedPresetPics = React.useMemo(() => {
+    const list: string[] = [];
+    if (Array.isArray(pics) && pics.length > 0) {
+      for (const p of pics) {
+        if (p.name && !list.includes(p.name)) list.push(p.name);
+      }
+    }
+    for (const p of DEFAULT_PRESET_PICS) {
+      if (!list.includes(p)) list.push(p);
+    }
+    return list;
+  }, [pics]);
 
   const rowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
 
@@ -226,6 +416,7 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
     (deadlineFilter && deadlineFilter !== 'all') ||
     (forecastFilter && forecastFilter !== 'all') ||
     (progressFilter && progressFilter !== 'ALL') ||
+    (picFilter && picFilter !== 'ALL') ||
     Boolean(filterProjectId) ||
     Boolean(filterPackageId) ||
     Boolean(filterTagId);
@@ -238,6 +429,7 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
     if (onDeadlineFilterChange) onDeadlineFilterChange('all');
     if (onForecastFilterChange) onForecastFilterChange('all');
     if (onProgressFilterChange) onProgressFilterChange('ALL');
+    if (onPicFilterChange) onPicFilterChange('ALL');
     setFilterProjectId(null);
     setFilterPackageId(null);
     setFilterTagId(null);
@@ -294,11 +486,11 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
             <col className="w-[82px]" />
             <col />
             <col className="w-[126px]" />
-            <col className="w-[70px]" />
+            <col className="w-[68px]" />
             <col className="w-[82px]" />
             <col className="w-[78px]" />
             <col className="w-[62px]" />
-            <col className="w-[52px] print:hidden" />
+            <col className="w-[44px] print:hidden" />
           </colgroup>
           <thead className="select-none print:table-header-group">
             {/* ROW 1: Clean Column Titles with 2-Way Sort Arrows */}
@@ -385,19 +577,19 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
                 </button>
               </th>
 
-              {/* Progress */}
-              <th className="sticky top-0 z-30 bg-slate-100 dark:bg-slate-800 w-[70px] print:w-14 py-2 px-1 text-left align-middle border-b border-slate-200 dark:border-slate-700">
+              {/* PIC - Person In Charge */}
+              <th className="sticky top-0 z-30 bg-slate-100 dark:bg-slate-800 w-[68px] print:w-16 py-2 px-1 text-center align-middle border-b border-slate-200 dark:border-slate-700">
                 <button
                   type="button"
-                  onClick={() => onSortChange && onSortChange('progress')}
-                  className={`inline-flex items-center space-x-1 transition-colors cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 group text-[11px] ${
-                    currentSort?.startsWith('progress') ? 'text-blue-600 dark:text-blue-400 font-bold' : ''
+                  onClick={() => onSortChange && onSortChange('pic')}
+                  className={`inline-flex items-center justify-center space-x-1 transition-colors cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 group text-[11px] w-full text-center ${
+                    currentSort?.startsWith('pic') ? 'text-blue-600 dark:text-blue-400 font-bold' : ''
                   }`}
-                  title="Sort by progress"
+                  title="Sort by PIC"
                 >
-                  <span>Progress</span>
+                  <span>PIC</span>
                   <ArrowUpDown className={`w-3 h-3 ${
-                    currentSort?.startsWith('progress') ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500 group-hover:text-blue-500'
+                    currentSort?.startsWith('pic') ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500 group-hover:text-blue-500'
                   } print:hidden`} />
                 </button>
               </th>
@@ -442,8 +634,8 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
               </th>
 
               {/* Actions */}
-              <th className="sticky top-0 z-30 bg-slate-100 dark:bg-slate-800 w-[52px] py-2 px-1 text-right align-middle print:hidden border-b border-slate-200 dark:border-slate-700">
-                <span className="text-[11px]">Actions</span>
+              <th className="sticky top-0 z-30 bg-slate-100 dark:bg-slate-800 w-[44px] py-2 px-1 text-center align-middle print:hidden border-b border-slate-200 dark:border-slate-700">
+                <span className="text-[11px]">Action</span>
               </th>
             </tr>
 
@@ -560,27 +752,30 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
                 </div>
               </th>
 
-              {/* Progress Filter Box */}
-              <th className="sticky top-9 z-20 bg-slate-50 dark:bg-slate-900 w-[70px] py-1 px-0.5 text-left align-middle font-normal border-b border-slate-200 dark:border-slate-800 shadow-2xs">
-                {onProgressFilterChange ? (
+              {/* PIC Filter Box */}
+              <th className="sticky top-9 z-20 bg-slate-50 dark:bg-slate-900 w-[68px] py-1 px-0.5 text-center align-middle font-normal border-b border-slate-200 dark:border-slate-800 shadow-2xs">
+                {onPicFilterChange ? (
                   <select
-                    value={progressFilter}
-                    onChange={(e) => onProgressFilterChange(e.target.value)}
-                    aria-label="Filter Progress"
-                    className={`w-full text-[9.5px] py-0.5 px-0.5 rounded-md border outline-none font-mono transition-colors shadow-2xs cursor-pointer ${
-                      progressFilter !== 'ALL'
+                    value={picFilter || 'ALL'}
+                    onChange={(e) => onPicFilterChange(e.target.value)}
+                    aria-label="Filter PIC"
+                    className={`w-full text-[9px] py-0.5 px-0.5 rounded-md border outline-none transition-colors shadow-2xs cursor-pointer ${
+                      picFilter && picFilter !== 'ALL'
                         ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-400 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-semibold'
                         : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600 focus:border-blue-500'
                     }`}
                   >
-                    <option value="ALL">All %</option>
-                    <option value="0">0%</option>
-                    <option value="ACTIVE">1-99%</option>
-                    <option value="100">100%</option>
+                    <option value="ALL">All</option>
+                    <option value="UNASSIGNED">None</option>
+                    {combinedPresetPics.map((p) => (
+                      <option key={p} value={p}>
+                        {p}
+                      </option>
+                    ))}
                   </select>
                 ) : (
                   <div className="text-[10px] text-slate-400 dark:text-slate-500 text-center py-0.5 font-mono">
-                    %
+                    PIC
                   </div>
                 )}
               </th>
@@ -664,7 +859,7 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
               </th>
 
               {/* Actions Reset Button */}
-              <th className="sticky top-9 z-20 bg-slate-50 dark:bg-slate-900 w-[52px] py-1 px-0.5 text-right align-middle font-normal border-b border-slate-200 dark:border-slate-800 shadow-2xs">
+              <th className="sticky top-9 z-20 bg-slate-50 dark:bg-slate-900 w-[44px] py-1 px-0.5 text-right align-middle font-normal border-b border-slate-200 dark:border-slate-800 shadow-2xs">
                 <div className="flex justify-end">
                   {hasActiveFilters ? (
                     <button
@@ -716,21 +911,13 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
                 const pCode = task.project_code || projectObj?.code;
                 const pName = task.project_name || projectObj?.name;
 
-                const getCellBorderClass = (pos: 'first' | 'middle' | 'last') => {
-                  if (isRowActive) {
-                    if (pos === 'first') {
-                      return 'border-b border-blue-500/80 shadow-[inset_2px_0_0_0_#3b82f6,inset_0_1.5px_0_0_#3b82f6,inset_0_-1.5px_0_0_#3b82f6] bg-blue-50/95 dark:bg-blue-950/50 print:border-none print:bg-transparent print:shadow-none';
-                    }
-                    if (pos === 'last') {
-                      return 'border-b border-blue-500/80 shadow-[inset_-2px_0_0_0_#3b82f6,inset_0_1.5px_0_0_#3b82f6,inset_0_-1.5px_0_0_#3b82f6] bg-blue-50/95 dark:bg-blue-950/50 print:border-none print:bg-transparent print:shadow-none';
-                    }
-                    return 'border-b border-blue-500/80 shadow-[inset_0_1.5px_0_0_#3b82f6,inset_0_-1.5px_0_0_#3b82f6] bg-blue-50/95 dark:bg-blue-950/50 print:border-none print:bg-transparent print:shadow-none';
-                  }
-
+                const getCellBorderClass = (_pos: 'first' | 'middle' | 'last') => {
                   if (isSelected) {
-                    return 'border-b border-slate-200 dark:border-slate-800 bg-blue-50/40 dark:bg-blue-950/30 print:bg-transparent';
+                    return 'border-b border-blue-200 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-950/35 print:bg-transparent';
                   }
-
+                  if (isRowActive) {
+                    return 'border-b border-slate-200 dark:border-slate-700 bg-slate-100/80 dark:bg-slate-800/60 print:bg-transparent';
+                  }
                   return 'border-b border-slate-200 dark:border-slate-800';
                 };
 
@@ -919,18 +1106,22 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
                       </div>
                     </td>
 
-                    {/* Progress Slider (Muted if done) */}
-                    <td className={`py-2 px-1 text-left align-top ${isCancelled ? 'opacity-50 pointer-events-none' : ''} ${getCellBorderClass('middle')}`}>
-                      <div className="print:hidden">
-                        <InlineProgressSlider
+                    {/* PIC - Person In Charge (Replaces Progress column) */}
+                    <td className={`py-2 px-0.5 text-center align-middle ${getCellBorderClass('middle')}`}>
+                      <div className="print:hidden flex items-center justify-center">
+                        <InlinePicSelector
                           taskId={task.id}
-                          initialProgress={task.progress}
-                          isDone={isDone || isCancelled}
-                          onCommit={onQuickProgressChange}
+                          pics={Array.isArray(task.pics) ? task.pics : []}
+                          presetPics={combinedPresetPics}
+                          onCommit={(taskId, newPics) => {
+                            if (onQuickPicsChange) {
+                              onQuickPicsChange(taskId, newPics);
+                            }
+                          }}
                         />
                       </div>
-                      <span className="hidden print:inline-block font-mono font-bold text-[7.5pt] text-slate-500">
-                        {task.progress}%
+                      <span className="hidden print:inline-block font-mono text-[7.5pt] text-slate-600 text-center">
+                        {Array.isArray(task.pics) && task.pics.length > 0 ? task.pics.join(', ') : '-'}
                       </span>
                     </td>
 
@@ -1049,38 +1240,30 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
                       </div>
                     </td>
 
-                    {/* Actions */}
-                    <td className={`py-2 px-0.5 text-right align-top print:hidden ${getCellBorderClass('last')}`}>
-                      <div className="flex items-center justify-end space-x-0.5">
+                    {/* Actions (Vertical layout: Mark as done on top, Delete on bottom) */}
+                    <td className={`py-1.5 px-0.5 text-center align-top print:hidden ${getCellBorderClass('last')}`}>
+                      <div className="flex flex-col items-center justify-center gap-1">
                         <button
+                          type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             onQuickStatusChange(task.id, isDone ? 'TODO' : 'DONE');
                           }}
-                          className={`p-0.5 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors ${
+                          className={`p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer ${
                             isDone ? 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300' : 'text-slate-400 hover:text-emerald-600'
                           }`}
                           title={isDone ? 'Mark as TODO' : 'Mark as Done'}
                         >
                           <CheckCircle2 className="w-3.5 h-3.5" />
                         </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedTaskId(task.id);
-                          }}
-                          className="p-0.5 rounded hover:bg-blue-50 dark:hover:bg-blue-950/50 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-                          title="Open details (or press Enter)"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                        </button>
                         {onDeleteTask && (
                           <button
+                            type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               onDeleteTask(task.id);
                             }}
-                            className="p-0.5 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
+                            className="p-1 rounded hover:bg-rose-50 dark:hover:bg-rose-950/50 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer"
                             title="Delete task"
                           >
                             <Trash2 className="w-3.5 h-3.5" />

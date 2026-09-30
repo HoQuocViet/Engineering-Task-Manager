@@ -4,6 +4,7 @@ import {
   Settings,
   Database,
   User,
+  Users,
   Layers,
   Sparkles,
   Sun,
@@ -11,6 +12,7 @@ import {
   Bot,
 } from 'lucide-react';
 import { ProfileSettingsTab } from './settings/ProfileSettingsTab';
+import { PicsSettingsTab } from './settings/PicsSettingsTab';
 import { AppearanceSettingsTab } from './settings/AppearanceSettingsTab';
 import { AISettingsTab } from './settings/AISettingsTab';
 import { CategoriesSettingsTab } from './settings/CategoriesSettingsTab';
@@ -20,7 +22,7 @@ import { getHeaderBoxClasses, getHeaderBoxStyle } from '../lib/headerTheme';
 export const SettingsView: React.FC = () => {
   const { workspaceBranding, toastMessage } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'profile' | 'appearance' | 'ai' | 'categories' | 'database'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'pics' | 'appearance' | 'ai' | 'categories' | 'database'>('profile');
 
   // Local state for Branding & Appearance
   const [brandTitle, setBrandTitle] = useState(workspaceBranding.title || DEFAULT_BRANDING.title);
@@ -89,6 +91,18 @@ export const SettingsView: React.FC = () => {
           </button>
 
           <button
+            onClick={() => setActiveTab('pics')}
+            className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'pics'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            <span>Persons In Charge (PIC)</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('appearance')}
             className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeTab === 'appearance'
@@ -141,6 +155,7 @@ export const SettingsView: React.FC = () => {
       {/* Scrollable Tab Panels */}
       <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pt-1 pb-4">
         {activeTab === 'profile' && <ProfileSettingsTab />}
+        {activeTab === 'pics' && <PicsSettingsTab />}
 
         {activeTab === 'appearance' && (
           <AppearanceSettingsTab

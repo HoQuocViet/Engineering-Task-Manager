@@ -68,6 +68,7 @@ export const TaskListView: React.FC = () => {
   const [deadlineFilter, setDeadlineFilter] = useState<string>('all');
   const [forecastFilter, setForecastFilter] = useState<string>('all');
   const [progressFilter, setProgressFilter] = useState('ALL');
+  const [picFilter, setPicFilter] = useState('ALL');
   const [sortField, setSortField] = useState('created_desc');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -92,6 +93,7 @@ export const TaskListView: React.FC = () => {
         deadlineFilter: deadlineFilter as any,
         forecastFilter: forecastFilter !== 'all' ? forecastFilter : undefined,
         progress: progressFilter !== 'ALL' ? progressFilter : undefined,
+        pic: picFilter !== 'ALL' ? picFilter : undefined,
         sort: sortField,
         limit: 200,
       });
@@ -114,6 +116,7 @@ export const TaskListView: React.FC = () => {
     deadlineFilter,
     forecastFilter,
     progressFilter,
+    picFilter,
     sortField,
     dataVersion,
     showToast,
@@ -230,6 +233,23 @@ export const TaskListView: React.FC = () => {
     }
   };
 
+  const handleQuickPicsChange = async (taskId: string, newPics: string[]) => {
+    // Optimistic local update
+    setTasks((prev) =>
+      prev.map((t) => (t.id === taskId ? { ...t, pics: newPics } : t))
+    );
+    try {
+      await api.updateTask(taskId, {
+        pics: newPics,
+        userId: currentUser?.id,
+      });
+      showToast('✅ Updated Person In Charge (PIC)');
+    } catch (err: any) {
+      showToast(`Failed to update PIC: ${err.message}`);
+      fetchTasks();
+    }
+  };
+
   const handleDeleteTask = (taskId: string) => {
     const target = tasks.find((t) => t.id === taskId);
     if (target) {
@@ -272,6 +292,7 @@ export const TaskListView: React.FC = () => {
     setDeadlineFilter('all');
     setForecastFilter('all');
     setProgressFilter('ALL');
+    setPicFilter('ALL');
     setSortField('created_desc');
     setSearchQuery('');
   };
@@ -283,6 +304,7 @@ export const TaskListView: React.FC = () => {
     filterPackageId !== null ||
     categoryFilter !== 'ALL' ||
     filterTagId !== null ||
+    picFilter !== 'ALL' ||
     deadlineFilter !== 'all' ||
     forecastFilter !== 'all' ||
     progressFilter !== 'ALL' ||
@@ -612,6 +634,7 @@ export const TaskListView: React.FC = () => {
             onQuickStatusChange={handleQuickStatusChange}
             onQuickPriorityChange={handleQuickPriorityChange}
             onQuickProgressChange={handleQuickProgressChange}
+            onQuickPicsChange={handleQuickPicsChange}
             onDeleteTask={handleDeleteTask}
             onSortChange={handleSortToggle}
             currentSort={sortField}
@@ -629,6 +652,8 @@ export const TaskListView: React.FC = () => {
             onForecastFilterChange={setForecastFilter}
             progressFilter={progressFilter}
             onProgressFilterChange={setProgressFilter}
+            picFilter={picFilter}
+            onPicFilterChange={setPicFilter}
             onResetColumnFilters={resetAllFilters}
           />
         )}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Task, TaskPriority, TaskStatus, TaskType } from '../../types';
+import { Task, TaskPriority, TaskStatus, TaskType, DEFAULT_PRESET_PICS } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { api } from '../../lib/api';
 import { getDeadlineBadge, getScheduleVariance, formatDateDisplay, formatDateTimeDisplay, getTodayYmd } from '../../lib/dateUtils';
@@ -18,6 +18,7 @@ import {
   Trash2,
   Send,
   Upload,
+  Users,
   Download,
   AlertCircle,
   AlertTriangle,
@@ -51,7 +52,7 @@ interface TaskDetailModalProps {
 }
 
 export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, onClose, onUpdated }) => {
-  const { packages, projects, categories, tags, currentUser, showToast, aiSettings } = useApp();
+  const { packages, projects, categories, tags, users, currentUser, showToast, aiSettings } = useApp();
 
   const [task, setTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(true);
@@ -67,6 +68,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, onClos
   const [priority, setPriority] = useState<TaskPriority>('MEDIUM');
   const [status, setStatus] = useState<TaskStatus>('TODO');
   const [progress, setProgress] = useState(0);
+  const [pics, setPics] = useState<string[]>([]);
   const [projectId, setProjectId] = useState<string>('');
   const [packageId, setPackageId] = useState<string>('');
   const [categoryId, setCategoryId] = useState<string>('');
@@ -76,6 +78,21 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, onClos
   const [completedDate, setCompletedDate] = useState('');
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [newTagName, setNewTagName] = useState('');
+
+  const combinedPresetPics = React.useMemo(() => {
+    const list = ['Ho Quoc Viet (Tôi)'];
+    for (const p of DEFAULT_PRESET_PICS) {
+      if (!list.includes(p)) list.push(p);
+    }
+    if (Array.isArray(users)) {
+      for (const u of users) {
+        if (u.name && !list.some((existing) => existing.toLowerCase().includes(u.name.toLowerCase()))) {
+          list.push(u.name);
+        }
+      }
+    }
+    return list;
+  }, [users]);
 
   // Comment state
   const [newComment, setNewComment] = useState('');
@@ -124,6 +141,9 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, onClos
       setForecastFinish(data.forecast_finish || '');
       setCompletedDate(data.completed_date || '');
       setSelectedTagIds(data.tags ? data.tags.map((t) => t.id) : []);
+
+      const initialPics = Array.isArray(data.pics) ? data.pics : [];
+      setPics(initialPics);
 
       // Initialize linked packages for group management
       const initialPkgIds = [data.package_id, ...(data.linked_tasks?.map((t: any) => t.package_id) || [])].filter(Boolean) as string[];
@@ -209,6 +229,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, onClos
         priority,
         status,
         progress,
+        pics,
         project_id: projectId || null,
         package_id: packageId || null,
         category_id: categoryId || null,
@@ -1216,6 +1237,70 @@ Technical Description:
 
             {/* Right Sidebar: Meta & Properties (1 Column) */}
             <div className="space-y-4 text-xs">
+              {/* Person In Charge (PIC) */}
+              <div className="p-3.5 bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-lg space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                    <span>Person In Charge (PIC)</span>
+                  </label>
+                  <span className="text-[10px] font-mono text-slate-400">
+                    {pics.length} selected
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap gap-1 max-h-28 overflow-y-auto">
+                  {pics.map((p) => {
+                    const isMe = p.includes('Tôi') || p.includes('Ho Quoc Viet');
+                    return (
+                      <span
+                        key={p}
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium border ${
+                          isMe
+                            ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-300 dark:border-blue-700 text-blue-800 dark:text-blue-200 font-semibold'
+                            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                        }`}
+                      >
+                        <span>{p}</span>
+                        {pics.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => setPics(pics.filter((item) => item !== p))}
+                            className="text-slate-400 hover:text-rose-500 cursor-pointer text-[12px] font-bold ml-0.5"
+                            title="Remove"
+                          >
+                            ×
+                          </button>
+                        )}
+                      </span>
+                    );
+                  })}
+                </div>
+
+                {/* Predefined candidates dropdown / add button */}
+                <div className="pt-0.5 flex gap-1">
+                  <select
+                    onChange={(e) => {
+                      if (e.target.value && !pics.includes(e.target.value)) {
+                        setPics([...pics, e.target.value]);
+                      }
+                      e.target.value = '';
+                    }}
+                    defaultValue=""
+                    className="flex-1 text-[11px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded px-2 py-1 outline-none cursor-pointer"
+                  >
+                    <option value="" disabled>+ Add person from predefined list...</option>
+                    {combinedPresetPics
+                      .filter((cand) => !pics.includes(cand))
+                      .map((cand) => (
+                        <option key={cand} value={cand}>
+                          {cand}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+
               {/* Priority & Type */}
               <div className="p-3.5 bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-lg space-y-3">
                 <div>

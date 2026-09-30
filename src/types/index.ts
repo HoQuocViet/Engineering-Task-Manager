@@ -148,6 +148,7 @@ export interface Task {
   assignee_name?: string;
   assignee_role?: string;
   assignee_avatar?: string;
+  pics?: string[];
   tags?: Tag[];
   comments?: TaskComment[];
   attachments?: TaskAttachment[];
@@ -272,10 +273,30 @@ export interface TaskFilterOptions {
   progress?: string;
   tagId?: string;
   assigneeId?: string;
+  pic?: string;
   sort?: string;
   page?: number;
   limit?: number;
 }
+
+export interface PicMember {
+  id: string;
+  name: string;
+  role: string;
+  avatar?: string;
+  created_at: string;
+}
+
+export const DEFAULT_PRESET_PICS: string[] = [
+  'Ho Quoc Viet (Tôi)',
+  'Nguyen Van An',
+  'Tran Minh Duc',
+  'Le Thi Mai',
+  'Pham Hoang Nam',
+  'Vu Quoc Bao',
+  'Doan Tan Phat',
+  'Bui Anh Tuan',
+];
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 
