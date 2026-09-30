@@ -103,9 +103,13 @@ router.get('/', (req: Request, res: Response) => {
 
     const rawPic = (req.query.pic as string) || '';
     if (rawPic && rawPic !== 'ALL') {
-      const cleanPic = rawPic.replace(/\s*\(Tôi\)\s*$/, '').trim();
-      whereClauses.push('(t.pics LIKE ? OR u.name LIKE ?)');
-      params.push(`%${cleanPic}%`, `%${cleanPic}%`);
+      if (rawPic === 'UNASSIGNED') {
+        whereClauses.push("(t.pics IS NULL OR t.pics = '' OR t.pics = '[]' OR t.pics = 'null')");
+      } else {
+        const cleanPic = rawPic.replace(/\s*\(Tôi\)\s*$/, '').trim();
+        whereClauses.push('(t.pics LIKE ? OR t.pics LIKE ?)');
+        params.push(`%"${cleanPic}"%`, `%${cleanPic}%`);
+      }
     }
 
     // Tag filter

@@ -145,7 +145,7 @@ const InlinePicSelector: React.FC<{
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         title={selected.length > 0 ? `PIC: ${selected.join(', ')} (Click to edit)` : 'No PIC assigned (Click to add)'}
-        className="flex items-center justify-center p-0.5 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer group mx-auto"
+        className="flex items-center justify-start p-0.5 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer group"
       >
         {selected.length === 0 ? (
           <span
@@ -155,7 +155,7 @@ const InlinePicSelector: React.FC<{
             +
           </span>
         ) : (
-          <div className="flex items-center -space-x-1.5 overflow-hidden py-0.5 justify-center">
+          <div className="flex items-center -space-x-1.5 overflow-hidden py-0.5 justify-start">
             {selected.slice(0, 3).map((picName) => {
               const picRecord = registeredPics?.find((m) => m.name.toLowerCase() === picName.toLowerCase());
               const isMe = picName.includes('Tôi') || picName.includes('Ho Quoc Viet');
@@ -486,7 +486,7 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
             <col className="w-[82px]" />
             <col />
             <col className="w-[126px]" />
-            <col className="w-[68px]" />
+            <col className="w-[84px]" />
             <col className="w-[82px]" />
             <col className="w-[78px]" />
             <col className="w-[62px]" />
@@ -578,11 +578,11 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
               </th>
 
               {/* PIC - Person In Charge */}
-              <th className="sticky top-0 z-30 bg-slate-100 dark:bg-slate-800 w-[68px] print:w-16 py-2 px-1 text-center align-middle border-b border-slate-200 dark:border-slate-700">
+              <th className="sticky top-0 z-30 bg-slate-100 dark:bg-slate-800 w-[84px] print:w-20 py-2 px-1 text-left align-middle border-b border-slate-200 dark:border-slate-700">
                 <button
                   type="button"
                   onClick={() => onSortChange && onSortChange('pic')}
-                  className={`inline-flex items-center justify-center space-x-1 transition-colors cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 group text-[11px] w-full text-center ${
+                  className={`inline-flex items-center space-x-1 transition-colors cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 group text-[11px] text-left ${
                     currentSort?.startsWith('pic') ? 'text-blue-600 dark:text-blue-400 font-bold' : ''
                   }`}
                   title="Sort by PIC"
@@ -753,7 +753,7 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
               </th>
 
               {/* PIC Filter Box */}
-              <th className="sticky top-9 z-20 bg-slate-50 dark:bg-slate-900 w-[68px] py-1 px-0.5 text-center align-middle font-normal border-b border-slate-200 dark:border-slate-800 shadow-2xs">
+              <th className="sticky top-9 z-20 bg-slate-50 dark:bg-slate-900 w-[84px] py-1 px-0.5 text-left align-middle font-normal border-b border-slate-200 dark:border-slate-800 shadow-2xs">
                 {onPicFilterChange ? (
                   <select
                     value={picFilter || 'ALL'}
@@ -765,8 +765,8 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
                         : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600 focus:border-blue-500'
                     }`}
                   >
-                    <option value="ALL">All</option>
-                    <option value="UNASSIGNED">None</option>
+                    <option value="ALL">All PICs</option>
+                    <option value="UNASSIGNED">Unassigned</option>
                     {combinedPresetPics.map((p) => (
                       <option key={p} value={p}>
                         {p}
@@ -774,7 +774,7 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
                     ))}
                   </select>
                 ) : (
-                  <div className="text-[10px] text-slate-400 dark:text-slate-500 text-center py-0.5 font-mono">
+                  <div className="text-[10px] text-slate-400 dark:text-slate-500 text-left py-0.5 font-mono">
                     PIC
                   </div>
                 )}
@@ -911,12 +911,15 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
                 const pCode = task.project_code || projectObj?.code;
                 const pName = task.project_name || projectObj?.name;
 
-                const getCellBorderClass = (_pos: 'first' | 'middle' | 'last') => {
-                  if (isSelected) {
-                    return 'border-b border-blue-200 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-950/35 print:bg-transparent';
-                  }
-                  if (isRowActive) {
-                    return 'border-b border-slate-200 dark:border-slate-700 bg-slate-100/80 dark:bg-slate-800/60 print:bg-transparent';
+                const getCellBorderClass = (pos: 'first' | 'middle' | 'last') => {
+                  if (isRowActive || isSelected) {
+                    if (pos === 'first') {
+                      return 'border-b border-transparent shadow-[inset_2px_2px_0_#2563eb,inset_0_-2px_0_#2563eb] rounded-l-lg bg-blue-50/70 dark:bg-blue-950/45 print:shadow-none print:bg-transparent';
+                    }
+                    if (pos === 'last') {
+                      return 'border-b border-transparent shadow-[inset_-2px_2px_0_#2563eb,inset_0_-2px_0_#2563eb] rounded-r-lg bg-blue-50/70 dark:bg-blue-950/45 print:shadow-none print:bg-transparent';
+                    }
+                    return 'border-b border-transparent shadow-[inset_0_2px_0_#2563eb,inset_0_-2px_0_#2563eb] bg-blue-50/70 dark:bg-blue-950/45 print:shadow-none print:bg-transparent';
                   }
                   return 'border-b border-slate-200 dark:border-slate-800';
                 };
@@ -942,12 +945,14 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
                     }}
                     title="Use Up/Down arrow keys to select, press Enter or double-click to open task details"
                     className={`cursor-pointer relative group outline-none ${
-                      isRowActive ? 'z-[1]' : ''
+                      isRowActive || isSelected ? 'z-[2]' : ''
                     } ${
                       isCancelled
                         ? 'opacity-50 grayscale hover:opacity-75'
                         : isDone
                         ? 'opacity-70 hover:opacity-90'
+                        : isRowActive || isSelected
+                        ? ''
                         : 'hover:bg-slate-50/80 dark:hover:bg-slate-800/60'
                     }`}
                   >
@@ -1107,8 +1112,8 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
                     </td>
 
                     {/* PIC - Person In Charge (Replaces Progress column) */}
-                    <td className={`py-2 px-0.5 text-center align-middle ${getCellBorderClass('middle')}`}>
-                      <div className="print:hidden flex items-center justify-center">
+                    <td className={`py-2 px-1 text-left align-top ${getCellBorderClass('middle')}`}>
+                      <div className="print:hidden flex items-center justify-start">
                         <InlinePicSelector
                           taskId={task.id}
                           pics={Array.isArray(task.pics) ? task.pics : []}
@@ -1120,7 +1125,7 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
                           }}
                         />
                       </div>
-                      <span className="hidden print:inline-block font-mono text-[7.5pt] text-slate-600 text-center">
+                      <span className="hidden print:inline-block font-mono text-[7.5pt] text-slate-600 text-left">
                         {Array.isArray(task.pics) && task.pics.length > 0 ? task.pics.join(', ') : '-'}
                       </span>
                     </td>

@@ -238,6 +238,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   forecast_finish TEXT,
   completed_date TEXT,
   assignee_id TEXT,
+  pics TEXT,                      -- JSON array string of PIC names e.g. '["Ho Quoc Viet", "Nguyen Van An"]'
   group_id TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
@@ -333,6 +334,16 @@ CREATE TABLE IF NOT EXISTS outlook_events (
   web_link TEXT,
   synced_at TEXT NOT NULL
 );
+
+-- 12. Persons In Charge (PIC / Project Team Members)
+CREATE TABLE IF NOT EXISTS pics (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  role TEXT,
+  avatar TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 ```
 
 ### 4.2 SQLite Custom Registered Functions
@@ -377,12 +388,24 @@ All major views must feature a consistent 62px-height top banner adhering to the
 - **Filter Toolbar**:
   - Global text search input.
   - Status filter pill buttons (`ALL`, `TODO`, `IN PROGRESS`, `WAITING`, `DONE`, `CRITICAL`).
-  - Dropdown filters: Project, Package, Category/Discipline, Assignee, Priority.
+  - Dropdown filters: Project, Package, Category/Discipline, Assignee, Priority, PIC (Person In Charge).
   - Action buttons: Quick Add Task (`+`), Export to Excel (`.xlsx`), Print Preview modal.
 - **Dense Data Grid (`TaskListTable.tsx`)**:
-  - **Zero-Flick Selection Architecture**: Rows highlight with solid `bg-blue-50/95 dark:bg-blue-950/50` and border `border-blue-500/80` without changing `font-weight` or altering cell border radii, preventing UI jitter.
+  - **PIC (Person In Charge) Column Architecture (`w-[84px]`)**:
+    - Replaces legacy progress column with a compact, left-aligned `w-[84px]` column.
+    - Stacked circular avatars: Displays up to 3 circular avatar photos with `-space-x-1.5` overlapping styling, plus a `+N` badge if > 3 PICs are assigned.
+    - Left-aligned across header, sticky filter box, and table cells (`text-left`, `justify-start`).
+    - Unassigned State: Explicitly shows a small dashed circular `+` button. Strictly prevents fallback to default user ("Ho Quoc Viet") or task creator.
+    - Interactive Inline Popover: Click on any PIC cell to open multi-select assignment popup with instant search, existing roster checkboxes, and on-the-fly inline team member creation.
+    - Accurate PIC Filtering: Backend queries strictly match inside the `t.pics` JSON array (`t.pics LIKE ?`), with dedicated `UNASSIGNED` filter to isolate unassigned deliverables.
+  - **Zero-Jitter Rounded Blue Selection Box**:
+    - When a deliverable row is active or selected (`isRowActive || isSelected`), a full rounded blue box (`#2563eb`) wraps around the deliverable without altering cell box-model dimensions.
+    - Implemented via `box-shadow: inset` (`shadow-[inset_2px_2px_0_#2563eb,...]` with `rounded-l-lg` on the first checkbox cell and `rounded-r-lg` on the last action cell) + subtle light-blue background `bg-blue-50/70 dark:bg-blue-950/45`.
+    - 100% fixed-height box model: Completely eliminates row height resizing, layout shifting, and visual flicker when switching selected tasks.
+  - **Action Column Ergonomics (`w-[44px]`)**:
+    - Vertically stacked Action buttons: `CheckCircle2` (Mark as Done / Toggle status) on top, `Trash2` (Delete) on bottom.
+    - Redundant preview eye icon removed since double-clicking any row or pressing `Enter` opens the task details modal.
   - **Keyboard Navigation**: Pressing $\uparrow$ / $\downarrow$ selects the adjacent deliverable; pressing `Enter` opens `TaskDetailModal`.
-  - **Inline Progress Slider**: Interactive 0-100% slider using neutral thumb styling (`accent-slate-400 dark:accent-slate-500`) with auto-completion trigger (reaching 100% prompts or updates status to `DONE`).
   - **Batch Operations**: Selecting multiple checkboxes summons the floating `BatchActionBar` at the bottom of the screen.
 
 #### View 3: My Work Queue (`MyWorkView.tsx`)
@@ -413,12 +436,15 @@ All major views must feature a consistent 62px-height top banner adhering to the
 
 #### View 8: Workspace Settings (`SettingsView.tsx`)
 - **Header**: Icon `<Settings>`, Title: `SYSTEM & WORKSPACE SETTINGS`, Subtitle: `LOCAL DATABASE, AI ENGINES & TEAM ROSTER`.
-- **Database Management Tab**:
-  - Displays database storage location (`data/app.db`) and file size.
-  - One-click **Download Database (`.sqlite`)** for safe offline backup.
-  - **Import / Restore Database**: Accepts any valid SQLite file buffer and hot-reloads data without server restart.
-  - **Reset to Demo Data**: Re-seeds default engineering projects, packages, and mock deliverables.
-- **AI Settings Tab**:
+- **Engineer Profile Tab (`ProfileSettingsTab.tsx`)**: Configure current logged-in engineer name, role, department, and contact information.
+- **Persons In Charge (PIC) Tab (`PicsSettingsTab.tsx`)**:
+  - Dedicated top-level tab placed directly alongside Engineer Profile.
+  - Team member management: Full Name (Tên người), Project Position / Role (Vị trí trong dự án), and Photo Avatar.
+  - **Click-to-Upload Avatar (No Separate Button)**: Users click directly on the avatar circle (with hover camera overlay and tooltip) to pick/upload photos (PNG, JPG, WEBP $\le$ 2MB).
+  - Direct list avatar click: Click directly on any team member's avatar in the right-hand roster to replace photo in-place and save to database immediately.
+  - Automatic bidirectional sync: PICs registered here appear immediately in the Task List dropdown, and inline additions in the Task List auto-persist to this table.
+- **Theme & Appearance Tab (`AppearanceSettingsTab.tsx`)**: Custom branding title, subtitle, acronym, header background color, and dark/light mode toggle.
+- **AI Settings Tab (`AISettingsTab.tsx`)**:
   - Select active provider: Google Gemini (`@google/genai`) or Anthropic Claude (`api.anthropic.com`).
   - Model selection with tier badges:
     - *Gemini 3.8 Flash*: Default recommended high-speed engineering model.
@@ -429,7 +455,12 @@ All major views must feature a consistent 62px-height top banner adhering to the
   - Independent API key storage and connection testing for both providers.
   - Custom system prompt & domain instructions (EPC deliverables, technical bid queries, WBS breakdowns).
   - Customizable Quick Prompts palette with icon picker and color chips.
-- **Team Roster Tab**: Add, edit, activate/deactivate engineers, and define disciplines.
+- **Work Categories Tab (`CategoriesSettingsTab.tsx`)**: Dedicated solely to discipline tags (Commissioning, Piping, HSE, Structural, Electrical) and deliverable categorization.
+- **Database Management Tab (`DatabaseSettingsTab.tsx`)**:
+  - Displays database storage location (`data/app.db`) and file size.
+  - One-click **Download Database (`.sqlite`)** for safe offline backup.
+  - **Import / Restore Database**: Accepts any valid SQLite file buffer and hot-reloads data without server restart.
+  - **Reset to Demo Data**: Re-seeds default engineering projects, packages, and mock deliverables.
 
 ---
 
@@ -459,16 +490,22 @@ All endpoints are hosted under the `/api` prefix.
 ### 6.4 Projects, Packages & Categories
 - `GET /api/projects` / `POST /api/projects` / `PATCH /api/projects/:id` / `DELETE /api/projects/:id`
 - `GET /api/packages` / `POST /api/packages` / `PATCH /api/packages/:id` / `DELETE /api/packages/:id`
-- `GET /api/categories` / `POST /api/categories` / `PATCH /api/categories/:id`
+- `GET /api/categories` / `POST /api/categories` / `PATCH /api/categories/:id` / `DELETE /api/categories/:id`
 - `GET /api/tags` / `POST /api/tags` / `DELETE /api/tags/:id`
 
-### 6.5 System & Database Administration
+### 6.5 Persons In Charge (PIC / Team Roster)
+- `GET /api/pics`: Returns list of all registered project team PICs (`id`, `name`, `role`, `avatar`, `created_at`).
+- `POST /api/pics`: Create team PIC. Payload: `{ name: string, role?: string, avatar?: string }`. Validates non-empty name and returns created PIC object.
+- `PATCH /api/pics/:id` & `PUT /api/pics/:id`: Update PIC details, role, or photo avatar.
+- `DELETE /api/pics/:id`: Remove PIC member from roster.
+
+### 6.6 System & Database Administration
 - `GET /api/system/stats`: Returns database file size, total records per table, and server uptime.
 - `GET /api/system/download-db`: Downloads raw `data/app.db` binary as an attachment named `engineering_tasks_backup_<timestamp>.sqlite`.
 - `POST /api/system/import-db`: Accepts uploaded `.sqlite` or `.db` file, instantiates new `sql.js` Database, validates schema, replaces `data/app.db`, and re-registers custom functions.
 - `POST /api/system/reset-db`: Drops/truncates tables and executes `server/seed.ts`.
 
-### 6.6 AI & Calendar Integrations
+### 6.7 AI & Calendar Integrations
 - `GET /api/ai/models`: Query parameter: `provider=gemini|claude`. Returns catalog of available models, descriptions, and recommended flags.
 - `POST /api/ai/test-connection`: Validates API key and model connectivity.
   - *Payload*: `{ customApiKey?, provider: 'gemini' | 'claude', model?: string }`.
