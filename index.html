@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Engineering Task & Work Manager</title>
+    <meta name="description" content="A fast, local desktop application for personal engineering task tracking, package management, deadlines, notes, activity history, and Microsoft Outlook 365 calendar synchronization." />
+    <meta property="og:title" content="Engineering Task & Work Manager" />
+    <meta property="og:description" content="A fast, local desktop application for personal engineering task tracking, package management, deadlines, notes, activity history, and Microsoft Outlook 365 calendar synchronization." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <script>
+      (function() {
+        var isExtensionError = function(msg) {
+          if (!msg) return false;
+          var str = String(msg).toLowerCase();
+          return (
+            str.indexOf('metamask') !== -1 ||
+            str.indexOf('failed to connect to metamask') !== -1 ||
+            str.indexOf('ethereum') !== -1 ||
+            str.indexOf('web3') !== -1 ||
+            str.indexOf('chrome-extension://') !== -1 ||
+            str.indexOf('moz-extension://') !== -1 ||
+            str.indexOf('safari-extension://') !== -1 ||
+            str.indexOf('evmprovider') !== -1
+          );
+        };
+
+        // 1. Intercept console.error immediately to suppress third-party extension noise
+        var origConsoleError = console.error;
+        console.error = function() {
+          for (var i = 0; i < arguments.length; i++) {
+            var arg = arguments[i];
+            var msg = (arg && (arg.message || arg.stack)) ? (arg.message + ' ' + arg.stack) : String(arg || '');
+            if (isExtensionError(msg)) {
+              return;
+            }
+          }
+          return origConsoleError.apply(console, arguments);
+        };
+
+        // 2. Intercept unhandledrejection
+        window.addEventListener('unhandledrejection', function(event) {
+          var reason = event.reason ? (event.reason.message || event.reason.stack || String(event.reason)) : '';
+          if (isExtensionError(reason)) {
+            event.preventDefault();
+            if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+            if (event.stopPropagation) event.stopPropagation();
+          }
+        }, true);
+
+        // 3. Intercept error events
+        window.addEventListener('error', function(event) {
+          var msg = (event.message || '') + ' ' + (event.filename || '') + ' ' + (event.error ? (event.error.stack || '') : '');
+          if (isExtensionError(msg)) {
+            event.preventDefault();
+            if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+            if (event.stopPropagation) event.stopPropagation();
+            return true;
+          }
+        }, true);
+
+        // 4. Fallback window.onerror
+        var prevOnError = window.onerror;
+        window.onerror = function(msg, url, lineNo, columnNo, error) {
+          var fullMsg = String(msg || '') + ' ' + String(url || '') + (error ? ' ' + (error.stack || '') : '');
+          if (isExtensionError(fullMsg)) {
+            return true;
+          }
+          if (typeof prevOnError === 'function') {
+            return prevOnError.apply(this, arguments);
+          }
+          return false;
+        };
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

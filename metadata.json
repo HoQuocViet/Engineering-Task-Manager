@@ -1,0 +1,6 @@
+{
+  "name": "Engineering Task & Work Manager",
+  "description": "A fast, local desktop application for personal engineering task tracking, package management, deadlines, notes, activity history, and Microsoft Outlook 365 calendar synchronization.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
