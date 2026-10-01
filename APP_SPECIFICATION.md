@@ -560,3 +560,44 @@ npm run lint
 # 5. Start production server
 npm start
 ```
+
+---
+
+## 9. Feature Development Status & Roadmap (Trạng thái tính năng & Kế hoạch tiếp theo)
+
+### 9.1 Completed Features (Đã hoàn thành)
+1. **Zero-Jitter Rounded Blue Selection Box for Table Rows**:
+   - Khôi phục khung viền hình chữ nhật bo góc màu blue (`#2563eb`) bao quanh toàn bộ item khi active bằng click hoặc phím mũi tên / tick chọn.
+   - Ứng dụng kỹ thuật `shadow-inset` (kết hợp `rounded-l-lg` cho ô đầu tiên, `rounded-r-lg` cho ô cuối cùng, viền trên và dưới liền mạch), cố định box model 100%, triệt tiêu hoàn toàn hiện tượng layout shift và nhấp nháy/giật chiều cao hàng.
+2. **Action Column Ergonomics**:
+   - Gỡ bỏ icon con mắt xem chi tiết (người dùng mở modal bằng phím Enter hoặc đúp chuột).
+   - Sắp xếp nút *Mark as Done* (`CheckCircle2`) ở trên và *Delete* (`Trash2`) ở dưới theo chiều dọc (`flex-col`), căn giữa gọn gàng trong cột hẹp `w-[44px]`.
+3. **Persons In Charge (PIC) Column Architecture**:
+   - Tăng kích thước cột PIC lên `w-[84px]`, chuyển toàn bộ sang căn lề trái (`text-left`, `justify-start`) ở Header, Hộp lọc và Dữ liệu từng hàng.
+   - Hiển thị tối đa 3 hình tròn avatar xếp chồng đè nhau (`-space-x-1.5`), có badge `+N` khi nhiều hơn 3 người.
+   - Khắc phục lỗi item chưa gán PIC bị tự ý gán avatar của user: khi chưa có ai, hiển thị nút hình tròn dấu cộng nét đứt nhỏ nhắn `+`, danh sách `pics` trả về `[]`.
+4. **Accurate PIC Filtering**:
+   - Sửa truy vấn backend: loại bỏ `OR u.name LIKE ?` để tránh lọc nhầm các task chỉ do user tạo nhưng chưa được phân công PIC.
+   - Hỗ trợ lọc chuyên biệt cho tùy chọn `Unassigned` để lọc chính xác tất cả các task chưa gán người phụ trách.
+5. **Dedicated Persons In Charge (PIC) Settings Tab**:
+   - Tách thành tab riêng **Persons In Charge (PIC)** (`PicsSettingsTab.tsx`) trong Settings, đặt ngang hàng với **Engineer Profile**.
+   - Hỗ trợ **click trực tiếp lên hình tròn avatar** để mở hộp thoại tải ảnh/thay đổi ảnh đại diện (bỏ nút nhấn riêng).
+   - Cho phép click trực tiếp lên avatar của từng thành viên ngay trong danh sách bên phải để cập nhật ảnh tức thì.
+   - Trả tab **Work Categories** về trạng thái nguyên bản tập trung chuyên sâu cho danh mục công việc kỹ thuật.
+
+### 9.2 In Progress & Verification (Đang hoàn thiện & Theo dõi)
+1. **Modal Form PIC Consistency**:
+   - Kiểm tra và đảm bảo tính đồng nhất khi tạo/sửa task trong `QuickTaskModal`, `TaskDetailModal` và popover `InlinePicSelector` luôn sử dụng chung dữ liệu `pics` từ SQLite.
+2. **Print / Export Styling for PICs**:
+   - Kiểm tra hiển thị văn bản danh sách PIC khi in ấn hoặc xuất PDF bảng công việc (khổ A4 ngang Landscape).
+
+### 9.3 Upcoming Planned Enhancements (Kế hoạch phiên tiếp theo)
+1. **Batch Assign PICs (Gán PIC hàng loạt)**:
+   - Cho phép chọn nhiều task qua checkbox và sử dụng Floating Action Bar để gán cùng lúc một hoặc nhiều PIC cho tất cả task đã chọn.
+2. **PIC Workload Distribution Widget (Thống kê tải công việc theo PIC)**:
+   - Bổ sung biểu đồ phân bổ số lượng task (Đang thực hiện, Quá hạn, Đã hoàn thành) của từng kỹ sư trên Dashboard View.
+3. **Client-Side Image Optimization for Avatars**:
+   - Tự động nén và resize ảnh chụp avatar về kích thước chuẩn (128x128px) trước khi chuyển thành base64 để tối ưu hóa bộ nhớ SQLite.
+4. **Multi-Select PIC Filter (Bộ lọc đa chọn PIC)**:
+   - Nâng cấp bộ lọc tại header cho phép chọn nhiều PIC cùng lúc (lọc theo nhóm kỹ sư phụ trách).
+

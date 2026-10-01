@@ -104,11 +104,25 @@ router.get('/', (req: Request, res: Response) => {
     const rawPic = (req.query.pic as string) || '';
     if (rawPic && rawPic !== 'ALL') {
       if (rawPic === 'UNASSIGNED') {
-        whereClauses.push("(t.pics IS NULL OR t.pics = '' OR t.pics = '[]' OR t.pics = 'null')");
+        whereClauses.push("(t.pics IS NULL OR t.pics = '' OR t.pics = '[]' OR t.pics = 'null' OR TRIM(t.pics) = '' OR TRIM(t.pics) = '[\"\"]')");
       } else {
         const cleanPic = rawPic.replace(/\s*\(Tôi\)\s*$/, '').trim();
-        whereClauses.push('(t.pics LIKE ? OR t.pics LIKE ?)');
-        params.push(`%"${cleanPic}"%`, `%${cleanPic}%`);
+        whereClauses.push(`(
+          VI_MATCH(t.pics, ?) = 1
+          OR VI_MATCH(t.pics, ?) = 1
+          OR t.pics LIKE ?
+          OR t.pics LIKE ?
+          OR t.pics LIKE ?
+          OR t.pics LIKE ?
+        )`);
+        params.push(
+          rawPic,
+          cleanPic,
+          `%"${rawPic}"%`,
+          `%"${cleanPic}"%`,
+          `%${rawPic}%`,
+          `%${cleanPic}%`
+        );
       }
     }
 
@@ -257,6 +271,10 @@ router.get('/', (req: Request, res: Response) => {
       orderBy = 't.forecast_finish ASC NULLS LAST, t.created_at DESC';
     } else if (sort === 'forecast_desc') {
       orderBy = 't.forecast_finish DESC NULLS LAST, t.created_at DESC';
+    } else if (sort === 'pic' || sort === 'pic_asc') {
+      orderBy = "CASE WHEN t.pics IS NULL OR t.pics = '' OR t.pics = '[]' THEN 1 ELSE 0 END ASC, t.pics ASC, t.created_at DESC";
+    } else if (sort === 'pic_desc') {
+      orderBy = "CASE WHEN t.pics IS NULL OR t.pics = '' OR t.pics = '[]' THEN 1 ELSE 0 END ASC, t.pics DESC, t.created_at DESC";
     }
 
     const whereSql = whereClauses.join(' AND ');

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Task, TaskPriority, TaskStatus, DEFAULT_PRESET_PICS } from '../../types';
+import { Task, TaskPriority, TaskStatus } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { getDeadlineBadge, getScheduleVariance, formatDateDisplay, formatDateDdMmYyyy } from '../../lib/dateUtils';
 import {
@@ -64,9 +64,9 @@ interface TaskListTableProps {
 const InlinePicSelector: React.FC<{
   taskId: string;
   pics: string[];
-  presetPics: string[];
+  presetPics?: string[];
   onCommit: (taskId: string, pics: string[]) => void;
-}> = ({ taskId, pics = [], presetPics, onCommit }) => {
+}> = ({ taskId, pics = [], onCommit }) => {
   const { pics: registeredPics, createPicInline } = useApp();
   const [isOpen, setIsOpen] = useState(false);
   const [selected, setSelected] = useState<string[]>(pics);
@@ -130,14 +130,18 @@ const InlinePicSelector: React.FC<{
     const list: string[] = [];
     if (Array.isArray(registeredPics)) {
       for (const p of registeredPics) {
-        if (p.name && !list.includes(p.name)) list.push(p.name);
+        if (p.name && !list.includes(p.name)) {
+          list.push(p.name);
+        }
       }
     }
-    for (const p of presetPics) {
-      if (!list.includes(p)) list.push(p);
+    for (const p of pics) {
+      if (p && !list.includes(p)) {
+        list.push(p);
+      }
     }
     return list;
-  }, [registeredPics, presetPics]);
+  }, [registeredPics, pics]);
 
   return (
     <div className="relative inline-block text-left" ref={popoverRef} onClick={(e) => e.stopPropagation()}>
@@ -194,18 +198,18 @@ const InlinePicSelector: React.FC<{
       </button>
 
       {isOpen && (
-        <div className="absolute left-0 top-full mt-1 w-64 z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl p-2.5 space-y-2 text-xs animate-in fade-in duration-100">
+        <div className="absolute left-0 top-full mt-1 w-72 z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl p-2.5 space-y-2 text-xs animate-in fade-in duration-100">
           <div className="flex items-center justify-between pb-1.5 border-b border-slate-100 dark:border-slate-800">
             <span className="font-bold text-[11px] text-slate-700 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1">
-              <Users className="w-3 h-3 text-blue-600" />
+              <Users className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
               <span>Person In Charge</span>
             </span>
-            <span className="text-[10px] text-slate-400 font-mono">
-              {selected.length} set
+            <span className="text-[10.5px] text-slate-500 dark:text-slate-400 font-mono font-semibold">
+              {selected.length} / {allAvailableList.length} assigned
             </span>
           </div>
 
-          <div className="max-h-48 overflow-y-auto space-y-0.5 pr-1 scrollbar-crystal-dark">
+          <div className="max-h-64 overflow-y-auto space-y-0.5 pr-1 scrollbar-crystal-dark">
             {allAvailableList.map((p) => {
               const isChecked = selected.includes(p);
               const picRecord = registeredPics?.find((m) => m.name.toLowerCase() === p.toLowerCase());
@@ -329,17 +333,9 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
     pics,
   } = useApp();
 
-  const combinedPresetPics = React.useMemo(() => {
-    const list: string[] = [];
-    if (Array.isArray(pics) && pics.length > 0) {
-      for (const p of pics) {
-        if (p.name && !list.includes(p.name)) list.push(p.name);
-      }
-    }
-    for (const p of DEFAULT_PRESET_PICS) {
-      if (!list.includes(p)) list.push(p);
-    }
-    return list;
+  const settingPics = React.useMemo(() => {
+    if (!Array.isArray(pics) || pics.length === 0) return [];
+    return pics.map((p) => p.name).filter(Boolean);
   }, [pics]);
 
   const rowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
@@ -767,7 +763,7 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
                   >
                     <option value="ALL">All PICs</option>
                     <option value="UNASSIGNED">Unassigned</option>
-                    {combinedPresetPics.map((p) => (
+                    {settingPics.map((p) => (
                       <option key={p} value={p}>
                         {p}
                       </option>
@@ -1117,7 +1113,7 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
                         <InlinePicSelector
                           taskId={task.id}
                           pics={Array.isArray(task.pics) ? task.pics : []}
-                          presetPics={combinedPresetPics}
+                          presetPics={settingPics}
                           onCommit={(taskId, newPics) => {
                             if (onQuickPicsChange) {
                               onQuickPicsChange(taskId, newPics);

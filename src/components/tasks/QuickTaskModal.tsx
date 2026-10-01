@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { api } from '../../lib/api';
-import { TaskPriority, TaskType, TaskStatus, DEFAULT_PRESET_PICS } from '../../types';
+import { TaskPriority, TaskType, TaskStatus } from '../../types';
 import { getTodayYmd, getDeadlineBadge } from '../../lib/dateUtils';
 import { X, Plus, Calendar, Clock, Sparkles, RotateCcw, Loader2, Layers, CheckSquare, Square, Link2, Search, Users } from 'lucide-react';
 import { DatePicker } from '../common/DatePicker';
+import { PicSelector } from '../common/PicSelector';
 
 interface QuickTaskModalProps {
   isOpen: boolean;
@@ -41,20 +42,7 @@ export const QuickTaskModal: React.FC<QuickTaskModalProps> = ({
   const [isRewordingDesc, setIsRewordingDesc] = useState(false);
   const [previousDescription, setPreviousDescription] = useState<string | null>(null);
 
-  const combinedPresetPics = React.useMemo(() => {
-    const list = ['Ho Quoc Viet (Tôi)'];
-    for (const p of DEFAULT_PRESET_PICS) {
-      if (!list.includes(p)) list.push(p);
-    }
-    if (Array.isArray(users)) {
-      for (const u of users) {
-        if (u.name && !list.some((existing) => existing.toLowerCase().includes(u.name.toLowerCase()))) {
-          list.push(u.name);
-        }
-      }
-    }
-    return list;
-  }, [users]);
+
 
   // Multi-Project / Multi-Package mode
   const [isMultiTarget, setIsMultiTarget] = useState(false);
@@ -654,63 +642,7 @@ Technical Description:
           </div>
 
           {/* PIC - Person In Charge */}
-          <div>
-            <div className="flex justify-between items-center mb-1">
-              <label className="text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                <Users className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                <span>Person In Charge (PIC)</span>
-              </label>
-              <span className="text-[10px] font-mono text-slate-400">
-                {pics.length} selected
-              </span>
-            </div>
-            <div className="flex flex-wrap items-center gap-1 p-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg">
-              {pics.map((p) => {
-                const isMe = p.includes('Tôi') || p.includes('Ho Quoc Viet');
-                return (
-                  <span
-                    key={p}
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium border ${
-                      isMe
-                        ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-300 dark:border-blue-700 text-blue-800 dark:text-blue-200 font-semibold'
-                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
-                    }`}
-                  >
-                    <span>{p}</span>
-                    {pics.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => setPics(pics.filter((item) => item !== p))}
-                        className="text-slate-400 hover:text-rose-500 cursor-pointer text-[12px] font-bold ml-0.5"
-                        title="Remove"
-                      >
-                        ×
-                      </button>
-                    )}
-                  </span>
-                );
-              })}
-              <select
-                onChange={(e) => {
-                  if (e.target.value && !pics.includes(e.target.value)) {
-                    setPics([...pics, e.target.value]);
-                  }
-                  e.target.value = '';
-                }}
-                defaultValue=""
-                className="text-[11px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded px-1.5 py-0.5 outline-none cursor-pointer"
-              >
-                <option value="" disabled>+ Add person from list...</option>
-                {combinedPresetPics
-                  .filter((cand) => !pics.includes(cand))
-                  .map((cand) => (
-                    <option key={cand} value={cand}>
-                      {cand}
-                    </option>
-                  ))}
-              </select>
-            </div>
-          </div>
+          <PicSelector selectedPics={pics} onChange={setPics} />
 
           {/* Deadline with Quick Shortcuts */}
           <div>

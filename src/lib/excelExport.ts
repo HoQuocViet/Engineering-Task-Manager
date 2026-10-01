@@ -26,6 +26,7 @@ export function exportTasksToExcel(tasks: Task[], options?: ExportTasksOptions) 
       'Status': t.status,
       'Progress (%)': t.progress,
       'Task Title / Deliverable': t.title,
+      'Person In Charge (PIC)': Array.isArray(t.pics) && t.pics.length > 0 ? t.pics.join(', ') : 'Unassigned',
       'Project Code': t.project_code || '—',
       'Project Name': t.project_name || '—',
       'Package Code': t.package_code || '—',
@@ -53,6 +54,7 @@ export function exportTasksToExcel(tasks: Task[], options?: ExportTasksOptions) 
     { wch: 15 },  // Status
     { wch: 14 },  // Progress (%)
     { wch: 45 },  // Task Title / Deliverable
+    { wch: 22 },  // Person In Charge (PIC)
     { wch: 15 },  // Project Code
     { wch: 30 },  // Project Name
     { wch: 15 },  // Package Code

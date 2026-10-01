@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Task, TaskPriority, TaskStatus, TaskType, DEFAULT_PRESET_PICS } from '../../types';
+import { Task, TaskPriority, TaskStatus, TaskType } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { api } from '../../lib/api';
 import { getDeadlineBadge, getScheduleVariance, formatDateDisplay, formatDateTimeDisplay, getTodayYmd } from '../../lib/dateUtils';
 import { AttachmentPreviewModal } from './AttachmentPreviewModal';
 import { generateSingleTaskDatasheetHtml, triggerDirectPrint } from '../../lib/printUtils';
 import { DatePicker } from '../common/DatePicker';
+import { PicSelector } from '../common/PicSelector';
 import {
   X,
   Clock,
@@ -79,20 +80,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, onClos
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [newTagName, setNewTagName] = useState('');
 
-  const combinedPresetPics = React.useMemo(() => {
-    const list = ['Ho Quoc Viet (Tôi)'];
-    for (const p of DEFAULT_PRESET_PICS) {
-      if (!list.includes(p)) list.push(p);
-    }
-    if (Array.isArray(users)) {
-      for (const u of users) {
-        if (u.name && !list.some((existing) => existing.toLowerCase().includes(u.name.toLowerCase()))) {
-          list.push(u.name);
-        }
-      }
-    }
-    return list;
-  }, [users]);
+
 
   // Comment state
   const [newComment, setNewComment] = useState('');
@@ -595,7 +583,7 @@ Technical Description:
     const activeProj = projects.find((p) => p.id === projectId);
     const activePkg = packages.find((p) => p.id === packageId);
     const html = generateSingleTaskDatasheetHtml(
-      { ...task, title, description, priority, status, progress, deadline, forecast_finish: forecastFinish, start_date: startDate, completed_date: completedDate },
+      { ...task, title, description, priority, status, progress, deadline, forecast_finish: forecastFinish, start_date: startDate, completed_date: completedDate, pics },
       activeProj,
       activePkg,
       task.comments || [],
@@ -1238,67 +1226,8 @@ Technical Description:
             {/* Right Sidebar: Meta & Properties (1 Column) */}
             <div className="space-y-4 text-xs">
               {/* Person In Charge (PIC) */}
-              <div className="p-3.5 bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-lg space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase flex items-center gap-1.5">
-                    <Users className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                    <span>Person In Charge (PIC)</span>
-                  </label>
-                  <span className="text-[10px] font-mono text-slate-400">
-                    {pics.length} selected
-                  </span>
-                </div>
-
-                <div className="flex flex-wrap gap-1 max-h-28 overflow-y-auto">
-                  {pics.map((p) => {
-                    const isMe = p.includes('Tôi') || p.includes('Ho Quoc Viet');
-                    return (
-                      <span
-                        key={p}
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium border ${
-                          isMe
-                            ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-300 dark:border-blue-700 text-blue-800 dark:text-blue-200 font-semibold'
-                            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
-                        }`}
-                      >
-                        <span>{p}</span>
-                        {pics.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => setPics(pics.filter((item) => item !== p))}
-                            className="text-slate-400 hover:text-rose-500 cursor-pointer text-[12px] font-bold ml-0.5"
-                            title="Remove"
-                          >
-                            ×
-                          </button>
-                        )}
-                      </span>
-                    );
-                  })}
-                </div>
-
-                {/* Predefined candidates dropdown / add button */}
-                <div className="pt-0.5 flex gap-1">
-                  <select
-                    onChange={(e) => {
-                      if (e.target.value && !pics.includes(e.target.value)) {
-                        setPics([...pics, e.target.value]);
-                      }
-                      e.target.value = '';
-                    }}
-                    defaultValue=""
-                    className="flex-1 text-[11px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded px-2 py-1 outline-none cursor-pointer"
-                  >
-                    <option value="" disabled>+ Add person from predefined list...</option>
-                    {combinedPresetPics
-                      .filter((cand) => !pics.includes(cand))
-                      .map((cand) => (
-                        <option key={cand} value={cand}>
-                          {cand}
-                        </option>
-                      ))}
-                  </select>
-                </div>
+              <div className="p-3.5 bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-lg">
+                <PicSelector selectedPics={pics} onChange={setPics} />
               </div>
 
               {/* Priority & Type */}

@@ -9,6 +9,7 @@ export interface PrintFilterInfo {
   priority?: string;
   category?: string;
   searchQuery?: string;
+  pic?: string;
 }
 
 function escapeHtml(str: string): string {
@@ -251,6 +252,18 @@ export function generatePrintReportHtml(
     .progress-bar-fill.done {
       background: #16a34a;
     }
+    .pic-tag {
+      display: inline-block;
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      border-radius: 3px;
+      padding: 1px 4px;
+      font-size: 6.8pt;
+      font-weight: 600;
+      color: #1e293b;
+      margin: 1px;
+      white-space: nowrap;
+    }
 
     .report-footer {
       border-top: 1px solid #cbd5e1;
@@ -319,6 +332,14 @@ export function generatePrintReportHtml(
           </div>`
         : ''
     }
+    ${
+      filterInfo.pic && filterInfo.pic !== 'ALL'
+        ? `<div class="filter-item">
+            <span class="filter-label">PIC:</span>
+            <span class="filter-value">${escapeHtml(filterInfo.pic === 'UNASSIGNED' ? 'Unassigned' : filterInfo.pic)}</span>
+          </div>`
+        : ''
+    }
   </div>
 
   <div class="kpi-strip">
@@ -347,22 +368,23 @@ export function generatePrintReportHtml(
   <table class="data-table">
     <thead>
       <tr>
-        <th style="width: 26px; text-align: center;">#</th>
-        <th style="width: 65px;">Priority</th>
-        <th style="width: 80px;">Status</th>
+        <th style="width: 24px; text-align: center;">#</th>
+        <th style="width: 60px;">Priority</th>
+        <th style="width: 75px;">Status</th>
         <th>Task Title / Note Description</th>
-        <th style="width: 140px;">Project / Package</th>
-        <th style="width: 80px;">Progress</th>
-        <th style="width: 75px;">Deadline</th>
-        <th style="width: 75px;">Forecast</th>
-        <th style="width: 60px;">Variance</th>
-        <th style="width: 100px;">Tags / Cat</th>
+        <th style="width: 125px;">Project / Package</th>
+        <th style="width: 110px;">Person In Charge (PIC)</th>
+        <th style="width: 75px;">Progress</th>
+        <th style="width: 70px;">Deadline</th>
+        <th style="width: 70px;">Forecast</th>
+        <th style="width: 55px;">Variance</th>
+        <th style="width: 90px;">Tags / Cat</th>
       </tr>
     </thead>
     <tbody>
       ${
         sortedTasks.length === 0
-          ? `<tr><td colspan="10" style="text-align: center; padding: 20px; color: #64748b;">No engineering tasks match the selected filter criteria.</td></tr>`
+          ? `<tr><td colspan="11" style="text-align: center; padding: 20px; color: #64748b;">No engineering tasks match the selected filter criteria.</td></tr>`
           : sortedTasks
               .map((t, idx) => {
                 const priorityBadgeClass =
@@ -420,6 +442,15 @@ export function generatePrintReportHtml(
                     }
                   </td>
                   <td style="font-size: 7pt; color: #334155;">${escapeHtml(pkgProjDisplay)}</td>
+                  <td style="font-size: 7pt; color: #1e293b;">
+                    ${
+                      Array.isArray(t.pics) && t.pics.length > 0
+                        ? `<div style="display: flex; flex-wrap: wrap; gap: 2px;">
+                            ${t.pics.map((p) => `<span class="pic-tag">${escapeHtml(p)}</span>`).join('')}
+                           </div>`
+                        : '<span style="color: #94a3b8; font-style: italic;">Unassigned</span>'
+                    }
+                  </td>
                   <td>
                     <div class="progress-bar-bg">
                       <div class="progress-bar-fill ${t.progress === 100 ? 'done' : ''}" style="width: ${t.progress || 0}%;"></div>
@@ -649,6 +680,26 @@ export function generateSingleTaskDatasheetHtml(
         <div style="margin-top: 4px;"><strong>Start Date:</strong> ${task.start_date ? formatDateDdMmYyyy(task.start_date) : 'Not specified'}</div>
         <div style="margin-top: 4px;"><strong>Completed Date:</strong> ${task.completed_date ? formatDateDdMmYyyy(task.completed_date) : 'Pending'}</div>
       </div>
+    </div>
+  </div>
+
+  <div class="section-box" style="margin-bottom: 12px;">
+    <div class="section-title">Person In Charge (PIC) & Engineering Team</div>
+    <div style="font-size: 8.5pt;">
+      ${
+        Array.isArray(task.pics) && task.pics.length > 0
+          ? `<div style="display: flex; flex-wrap: wrap; gap: 5px; align-items: center;">
+              ${task.pics
+                .map(
+                  (p: string) =>
+                    `<span class="badge" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 8pt; padding: 3px 8px; text-transform: none;">👤 ${escapeHtml(
+                      p
+                    )}</span>`
+                )
+                .join('')}
+            </div>`
+          : '<div style="color: #64748b; font-style: italic;">No PIC assigned (Unassigned deliverable)</div>'
+      }
     </div>
   </div>
 

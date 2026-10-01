@@ -682,6 +682,7 @@ export const TaskListView: React.FC = () => {
           priority: priorityFilter !== 'ALL' ? priorityFilter : undefined,
           category: categories.find((c) => c.id === categoryFilter)?.name,
           searchQuery: searchQuery || undefined,
+          pic: picFilter !== 'ALL' ? picFilter : undefined,
         }}
         workspaceBranding={workspaceBranding}
         projects={projects}

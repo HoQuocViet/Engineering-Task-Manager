@@ -49,6 +49,7 @@ export const api = {
     if (filters.progress) params.set('progress', filters.progress);
     if (filters.tagId) params.set('tagId', filters.tagId);
     if (filters.assigneeId) params.set('assigneeId', filters.assigneeId);
+    if (filters.pic) params.set('pic', filters.pic);
     if (filters.sort) params.set('sort', filters.sort);
     if (filters.limit) params.set('limit', String(filters.limit));
 
