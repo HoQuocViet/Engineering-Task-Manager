@@ -90,11 +90,20 @@ const InlinePicSelector: React.FC<{
   }, [isOpen]);
 
   const togglePic = (name: string) => {
+    const cleanName = name.replace(/\s*\(Tôi\)\s*$/, '').trim().toLowerCase();
+    const isCurrentlySelected = selected.some((s) => {
+      if (s === name) return true;
+      return s.replace(/\s*\(Tôi\)\s*$/, '').trim().toLowerCase() === cleanName;
+    });
+
     let next: string[];
-    if (selected.includes(name)) {
-      next = selected.filter((p) => p !== name);
+    if (isCurrentlySelected) {
+      next = selected.filter((s) => {
+        if (s === name) return false;
+        return s.replace(/\s*\(Tôi\)\s*$/, '').trim().toLowerCase() !== cleanName;
+      });
     } else {
-      next = [...selected, name];
+      next = [...selected.filter((s) => s.replace(/\s*\(Tôi\)\s*$/, '').trim().toLowerCase() !== cleanName), name];
     }
     setSelected(next);
     onCommit(taskId, next);
@@ -111,7 +120,8 @@ const InlinePicSelector: React.FC<{
     } catch (err) {
       console.error('Error creating PIC inline:', err);
     }
-    if (!selected.includes(name)) {
+    const cleanName = name.replace(/\s*\(Tôi\)\s*$/, '').trim().toLowerCase();
+    if (!selected.some((s) => s.replace(/\s*\(Tôi\)\s*$/, '').trim().toLowerCase() === cleanName)) {
       const next = [...selected, name];
       setSelected(next);
       onCommit(taskId, next);
@@ -126,6 +136,7 @@ const InlinePicSelector: React.FC<{
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   };
 
+  // Strictly driven by registered PICs from Settings (pics table in SQLite)
   const allAvailableList = React.useMemo(() => {
     const list: string[] = [];
     if (Array.isArray(registeredPics)) {
@@ -135,8 +146,16 @@ const InlinePicSelector: React.FC<{
         }
       }
     }
+    // Preserve any custom PIC assigned to this task without duplicating registered members
     for (const p of pics) {
-      if (p && !list.includes(p)) {
+      if (!p) continue;
+      const cleanP = p.replace(/\s*\(Tôi\)\s*$/, '').trim().toLowerCase();
+      const alreadyCovered = list.some(
+        (existing) =>
+          existing.toLowerCase() === p.toLowerCase() ||
+          existing.replace(/\s*\(Tôi\)\s*$/, '').trim().toLowerCase() === cleanP
+      );
+      if (!alreadyCovered) {
         list.push(p);
       }
     }
@@ -211,7 +230,11 @@ const InlinePicSelector: React.FC<{
 
           <div className="max-h-64 overflow-y-auto space-y-0.5 pr-1 scrollbar-crystal-dark">
             {allAvailableList.map((p) => {
-              const isChecked = selected.includes(p);
+              const cleanP = p.replace(/\s*\(Tôi\)\s*$/, '').trim().toLowerCase();
+              const isChecked = selected.some((s) => {
+                if (s === p) return true;
+                return s.replace(/\s*\(Tôi\)\s*$/, '').trim().toLowerCase() === cleanP;
+              });
               const picRecord = registeredPics?.find((m) => m.name.toLowerCase() === p.toLowerCase());
               const isMe = p.includes('Tôi') || p.includes('Ho Quoc Viet');
               return (

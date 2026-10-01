@@ -296,6 +296,7 @@ export const DEFAULT_PRESET_PICS: string[] = [
   'Vu Quoc Bao',
   'Doan Tan Phat',
   'Bui Anh Tuan',
+  'Dao Ba Lam',
 ];
 
 export type ThemeMode = 'light' | 'dark' | 'system';

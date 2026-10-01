@@ -356,9 +356,9 @@ function initSchema(database: Database): void {
         VALUES (?, ?, ?, ?, 0, ?)
       `, [
         'default',
-        process.env.AZURE_CLIENT_ID || 'c35e8947-da5e-4ee0-9438-b144bc773f20',
-        process.env.AZURE_TENANT_ID || 'c5f8b837-074d-4184-92dc-984a1f2d33a8',
-        process.env.AZURE_CLIENT_SECRET || 'aacbd7ca-42a9-4b07-a962-9053e664d6e1',
+        process.env.AZURE_CLIENT_ID || '',
+        process.env.AZURE_TENANT_ID || '',
+        process.env.AZURE_CLIENT_SECRET || '',
         new Date().toISOString()
       ]);
     }

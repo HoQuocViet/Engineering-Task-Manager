@@ -710,12 +710,37 @@ export function seedInitialDataIfNeeded(forceReset = false): void {
     const createdAt = formatIso(new Date(Date.now() - (15 - (i % 10)) * 86400000));
     const updatedAt = formatIso(now);
 
+    const picMapping: Record<string, string[]> = {
+      'tsk-b01-110': ['Nguyen Van An'],
+      'tsk-wtg-301': ['Pham Hoang Nam', 'Le Thi Mai'],
+      'tsk-ldv-208': ['Pham Hoang Nam', 'Bui Anh Tuan'],
+      'tsk-b01-108': ['Pham Hoang Nam', 'Vu Quoc Bao'],
+      'tsk-ldv-207': ['Pham Hoang Nam', 'Ho Quoc Viet (Tôi)'],
+      'tsk-b01-107': ['Pham Hoang Nam', 'Vu Quoc Bao'],
+      'tsk-ldv-206': ['Tran Minh Duc', 'Vu Quoc Bao'],
+      'tsk-b01-106': ['Pham Hoang Nam', 'Tran Minh Duc'],
+      'tsk-wtg-307': ['Pham Hoang Nam', 'Le Thi Mai'],
+      'tsk-b01-105': ['Pham Hoang Nam', 'Doan Tan Phat'],
+      'tsk-wtg-306': ['Doan Tan Phat', 'Vu Quoc Bao', 'Ho Quoc Viet (Tôi)'],
+      'tsk-ldv-204': ['Pham Hoang Nam', 'Bui Anh Tuan'],
+      'tsk-b01-104': ['Nguyen Van An', 'Ho Quoc Viet (Tôi)'],
+      'tsk-wtg-305': ['Pham Hoang Nam', 'Vu Quoc Bao'],
+      'tsk-ldv-203': ['Pham Hoang Nam', 'Le Thi Mai'],
+      'tsk-b01-103': ['Nguyen Van An', 'Bui Anh Tuan'],
+      'tsk-wtg-304': ['Nguyen Van An', 'Pham Hoang Nam'],
+      'tsk-ldv-202': ['Pham Hoang Nam', 'Ho Quoc Viet (Tôi)'],
+      'tsk-b01-102': ['Nguyen Van An', 'Bui Anh Tuan'],
+      'tsk-wtg-303': ['Nguyen Van An', 'Doan Tan Phat'],
+      'tsk-ldv-201': ['Pham Hoang Nam', 'Bui Anh Tuan'],
+    };
+    const taskPics = picMapping[s.id] || ['Ho Quoc Viet (Tôi)'];
+
     run(
       `INSERT INTO tasks (
         id, project_id, title, description, type, category_id, package_id, priority, status,
-        progress, start_date, deadline, forecast_finish, completed_date, assignee_id,
+        progress, start_date, deadline, forecast_finish, completed_date, assignee_id, pics,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         s.id,
         s.projectId,
@@ -732,6 +757,7 @@ export function seedInitialDataIfNeeded(forceReset = false): void {
         s.forecastFinish || null,
         s.completedDate || null,
         'usr-1',
+        JSON.stringify(taskPics),
         createdAt,
         updatedAt,
       ]

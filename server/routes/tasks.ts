@@ -104,25 +104,54 @@ router.get('/', (req: Request, res: Response) => {
     const rawPic = (req.query.pic as string) || '';
     if (rawPic && rawPic !== 'ALL') {
       if (rawPic === 'UNASSIGNED') {
-        whereClauses.push("(t.pics IS NULL OR t.pics = '' OR t.pics = '[]' OR t.pics = 'null' OR TRIM(t.pics) = '' OR TRIM(t.pics) = '[\"\"]')");
+        whereClauses.push("(t.pics IS NULL OR t.pics = '' OR t.pics = '[]' OR t.pics = 'null' OR TRIM(t.pics) = '' OR TRIM(t.pics) = '[\"\"]') AND (t.assignee_id IS NULL OR t.assignee_id = '')");
       } else {
         const cleanPic = rawPic.replace(/\s*\(Tôi\)\s*$/, '').trim();
-        whereClauses.push(`(
-          VI_MATCH(t.pics, ?) = 1
-          OR VI_MATCH(t.pics, ?) = 1
-          OR t.pics LIKE ?
-          OR t.pics LIKE ?
-          OR t.pics LIKE ?
-          OR t.pics LIKE ?
-        )`);
-        params.push(
-          rawPic,
-          cleanPic,
-          `%"${rawPic}"%`,
-          `%"${cleanPic}"%`,
-          `%${rawPic}%`,
-          `%${cleanPic}%`
-        );
+        const isSelf = rawPic.includes('Tôi') || cleanPic.toLowerCase() === 'ho quoc viet';
+        if (isSelf) {
+          whereClauses.push(`(
+            (json_valid(t.pics) = 1 AND EXISTS (
+              SELECT 1 FROM json_each(t.pics) j 
+              WHERE j.value = ? OR j.value = ? OR VI_MATCH(j.value, ?) = 1 OR VI_MATCH(j.value, ?) = 1
+            ))
+            OR VI_MATCH(t.pics, ?) = 1
+            OR VI_MATCH(t.pics, ?) = 1
+            OR t.pics LIKE ?
+            OR t.pics LIKE ?
+            OR ((t.pics IS NULL OR t.pics = '' OR t.pics = '[]' OR t.pics = 'null') AND t.assignee_id = 'usr-1')
+          )`);
+          params.push(
+            rawPic,
+            cleanPic,
+            rawPic,
+            cleanPic,
+            rawPic,
+            cleanPic,
+            `%"${cleanPic}"%`,
+            `%${cleanPic}%`
+          );
+        } else {
+          whereClauses.push(`(
+            (json_valid(t.pics) = 1 AND EXISTS (
+              SELECT 1 FROM json_each(t.pics) j 
+              WHERE j.value = ? OR j.value = ? OR VI_MATCH(j.value, ?) = 1 OR VI_MATCH(j.value, ?) = 1
+            ))
+            OR VI_MATCH(t.pics, ?) = 1
+            OR VI_MATCH(t.pics, ?) = 1
+            OR t.pics LIKE ?
+            OR t.pics LIKE ?
+          )`);
+          params.push(
+            rawPic,
+            cleanPic,
+            rawPic,
+            cleanPic,
+            rawPic,
+            cleanPic,
+            `%"${cleanPic}"%`,
+            `%${cleanPic}%`
+          );
+        }
       }
     }
 

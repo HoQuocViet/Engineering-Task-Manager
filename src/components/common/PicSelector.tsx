@@ -37,10 +37,17 @@ export const PicSelector: React.FC<PicSelectorProps> = ({
       }
     }
 
-    // 2. Preserve any previously assigned PICs on this task
+    // 2. Preserve any previously assigned custom PICs on this task without duplicating
     if (Array.isArray(selectedPics)) {
       for (const p of selectedPics) {
-        if (p && !list.includes(p)) {
+        if (!p) continue;
+        const cleanP = p.replace(/\s*\(Tôi\)\s*$/, '').trim().toLowerCase();
+        const alreadyCovered = list.some(
+          (existing) =>
+            existing.toLowerCase() === p.toLowerCase() ||
+            existing.replace(/\s*\(Tôi\)\s*$/, '').trim().toLowerCase() === cleanP
+        );
+        if (!alreadyCovered) {
           list.push(p);
         }
       }
@@ -77,12 +84,23 @@ export const PicSelector: React.FC<PicSelectorProps> = ({
   };
 
   const handleSelectPic = (name: string) => {
-    if (!name || selectedPics.includes(name)) return;
+    if (!name) return;
+    const cleanName = name.replace(/\s*\(Tôi\)\s*$/, '').trim().toLowerCase();
+    const alreadySelected = selectedPics.some((p) => {
+      if (p === name) return true;
+      return p.replace(/\s*\(Tôi\)\s*$/, '').trim().toLowerCase() === cleanName;
+    });
+    if (alreadySelected) return;
     onChange([...selectedPics, name]);
   };
 
   const handleRemovePic = (name: string) => {
-    onChange(selectedPics.filter((p) => p !== name));
+    const cleanName = name.replace(/\s*\(Tôi\)\s*$/, '').trim().toLowerCase();
+    onChange(
+      selectedPics.filter(
+        (p) => p !== name && p.replace(/\s*\(Tôi\)\s*$/, '').trim().toLowerCase() !== cleanName
+      )
+    );
   };
 
   const handleCreateNewPic = async (e: React.FormEvent) => {
