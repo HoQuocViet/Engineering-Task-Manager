@@ -3,6 +3,7 @@ import { Task, TaskPriority, TaskStatus, TaskType } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { api } from '../../lib/api';
 import { getDeadlineBadge, getScheduleVariance, formatDateDisplay, formatDateTimeDisplay, getTodayYmd } from '../../lib/dateUtils';
+import { normalizeTaskState } from '../../lib/taskStateMachine';
 import { AttachmentPreviewModal } from './AttachmentPreviewModal';
 import { generateSingleTaskDatasheetHtml, triggerDirectPrint } from '../../lib/printUtils';
 import { DatePicker } from '../common/DatePicker';
@@ -271,27 +272,27 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ taskId, onClos
   };
 
   const handleProgressChange = (newProgress: number) => {
-    const clamped = Math.min(100, Math.max(0, newProgress));
-    setProgress(clamped);
-    if (clamped === 100) {
-      setStatus('DONE');
-      if (!completedDate) setCompletedDate(getTodayYmd());
-    } else if (status === 'DONE' && clamped < 100) {
-      setStatus(clamped === 0 ? 'TODO' : 'IN PROGRESS');
-      setCompletedDate('');
-    }
+    const normalized = normalizeTaskState({
+      progress: newProgress,
+      existingStatus: status,
+      existingProgress: progress,
+      existingCompletedDate: completedDate,
+    });
+    setStatus(normalized.status);
+    setProgress(normalized.progress);
+    setCompletedDate(normalized.completed_date || '');
   };
 
   const handleStatusChange = (newStatus: TaskStatus) => {
-    const oldStatus = status;
-    setStatus(newStatus);
-    if (newStatus === 'DONE') {
-      setProgress(100);
-      if (!completedDate) setCompletedDate(getTodayYmd());
-    } else if (oldStatus === 'DONE') {
-      if (progress === 100) setProgress(newStatus === 'TODO' ? 0 : 80);
-      setCompletedDate('');
-    }
+    const normalized = normalizeTaskState({
+      status: newStatus,
+      existingStatus: status,
+      existingProgress: progress,
+      existingCompletedDate: completedDate,
+    });
+    setStatus(normalized.status);
+    setProgress(normalized.progress);
+    setCompletedDate(normalized.completed_date || '');
   };
 
   const handleAddComment = async (e: React.FormEvent) => {

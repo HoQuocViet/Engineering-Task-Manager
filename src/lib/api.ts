@@ -463,7 +463,7 @@ export const api = {
     provider?: 'gemini' | 'claude';
     model?: string;
     customInstructions?: string;
-  }): Promise<{ reply: string; modelUsed: string; provider?: string; timestamp: string }> => {
+  }): Promise<{ reply: string; modelUsed: string; provider?: string; timestamp: string; isFallback?: boolean; originalModel?: string; fallbackModel?: string }> => {
     const res = await fetch('/api/ai/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

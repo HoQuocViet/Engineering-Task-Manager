@@ -3,7 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
-import { queryOne, run, UPLOADS_DIR } from '../db.js';
+import { queryOne, run, withTransaction, cleanupOrphanFiles, UPLOADS_DIR } from '../db.js';
 
 const router = express.Router();
 
@@ -34,7 +34,7 @@ function getMimeType(filename: string, fallbackMime?: string): string {
   return mimeMap[ext] || fallbackMime || 'application/octet-stream';
 }
 
-function resolveDiskFilePath(filePath: string, fileName?: string): string | null {
+export function resolveDiskFilePath(filePath: string, fileName?: string): string | null {
   const possiblePaths = [
     filePath,
     path.resolve(filePath),
@@ -48,6 +48,19 @@ function resolveDiskFilePath(filePath: string, fileName?: string): string | null
     }
   }
   return null;
+}
+
+export function deletePhysicalFile(filePath: string, fileName?: string): boolean {
+  try {
+    const resolvedPath = resolveDiskFilePath(filePath, fileName);
+    if (resolvedPath && fs.existsSync(resolvedPath)) {
+      fs.unlinkSync(resolvedPath);
+      return true;
+    }
+  } catch (e) {
+    console.warn('Could not delete physical file:', e);
+  }
+  return false;
 }
 
 // Configure Multer storage
@@ -223,32 +236,38 @@ router.delete('/:id', (req: Request, res: Response) => {
     const att = queryOne<any>('SELECT * FROM task_attachments WHERE id = ?', [id]);
     if (!att) return res.status(404).json({ error: 'Attachment not found' });
 
-    // Delete file from disk safely
-    try {
-      const resolvedPath = resolveDiskFilePath(att.file_path, att.file_name);
-      if (resolvedPath && fs.existsSync(resolvedPath)) {
-        fs.unlinkSync(resolvedPath);
-      }
-    } catch (e) {
-      console.warn('Could not delete physical file:', e);
-    }
-
-    run('DELETE FROM task_attachments WHERE id = ?', [id]);
-
     const now = new Date().toISOString();
-    // Touch task updated_at
-    run('UPDATE tasks SET updated_at = ? WHERE id = ?', [now, att.task_id]);
-
-    // Log activity
     const actId = `act-${crypto.randomUUID().slice(0, 8)}`;
-    run(`
-      INSERT INTO task_activities (id, task_id, user_id, activity_type, field_name, old_value, note, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `, [actId, att.task_id, userId ? String(userId) : null, 'ATTACHMENT_REMOVED', 'attachment', att.original_name, `Removed attachment: ${att.original_name}`, now]);
 
-    res.json({ message: 'Attachment deleted' });
+    // 1. Delete DB record and record activity inside an atomic transaction
+    withTransaction(() => {
+      run('DELETE FROM task_attachments WHERE id = ?', [id]);
+      run('UPDATE tasks SET updated_at = ? WHERE id = ?', [now, att.task_id]);
+      run(`
+        INSERT INTO task_activities (id, task_id, user_id, activity_type, field_name, old_value, note, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `, [actId, att.task_id, userId ? String(userId) : null, 'ATTACHMENT_REMOVED', 'attachment', att.original_name, `Removed attachment: ${att.original_name}`, now]);
+    });
+
+    // 2. Only delete physical file from disk AFTER the DB mutation has successfully committed
+    deletePhysicalFile(att.file_path, att.file_name);
+
+    res.json({ message: 'Attachment deleted successfully' });
   } catch (err: any) {
     console.error('Error deleting attachment:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Cleanup orphan attachments on disk
+router.post('/cleanup-orphans', (req: Request, res: Response) => {
+  try {
+    const result = cleanupOrphanFiles();
+    res.json({
+      message: `Cleaned up ${result.totalOrphans} orphan attachment files.`,
+      ...result,
+    });
+  } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });

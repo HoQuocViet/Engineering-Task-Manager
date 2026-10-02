@@ -294,14 +294,14 @@ router.get('/stats', (req: Request, res: Response) => {
 
     // Fetch tags for urgent tasks
     if (urgentTasks.length > 0) {
-      const taskIds = urgentTasks.map((t: any) => `'${t.id}'`).join(',');
+      const placeholders = urgentTasks.map(() => '?').join(',');
       const tagsSql = `
         SELECT tt.task_id, tg.id, tg.name, tg.color 
         FROM task_tags tt
         JOIN tags tg ON tt.tag_id = tg.id
-        WHERE tt.task_id IN (${taskIds})
+        WHERE tt.task_id IN (${placeholders})
       `;
-      const allTags = query(tagsSql);
+      const allTags = query(tagsSql, urgentTasks.map((t: any) => t.id));
       const tagsByTaskId = new Map<string, any[]>();
       for (const tg of allTags) {
         if (!tagsByTaskId.has(tg.task_id)) tagsByTaskId.set(tg.task_id, []);

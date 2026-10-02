@@ -3,6 +3,7 @@ import { useApp } from '../context/AppContext';
 import { Task, TaskPriority, TaskStatus } from '../types';
 import { api } from '../lib/api';
 import { TaskListTable } from '../components/tasks/TaskListTable';
+import { normalizeTaskState } from '../lib/taskStateMachine';
 import { BatchActionBar } from '../components/tasks/BatchActionBar';
 import { exportTasksToExcel } from '../lib/excelExport';
 import { PrintPreviewModal } from '../components/tasks/PrintPreviewModal';
@@ -143,17 +144,23 @@ export const TaskListView: React.FC = () => {
   };
 
   const handleQuickStatusChange = async (taskId: string, newStatus: TaskStatus) => {
-    const newProgress = newStatus === 'DONE' ? 100 : undefined;
-    
+    const currentTask = tasks.find((t) => t.id === taskId);
+    const normalized = normalizeTaskState({
+      status: newStatus,
+      existingStatus: currentTask?.status,
+      existingProgress: currentTask?.progress,
+      existingCompletedDate: currentTask?.completed_date,
+    });
+
     // Optimistic local update
     setTasks((prev) =>
       prev.map((t) =>
         t.id === taskId
           ? {
               ...t,
-              status: newStatus,
-              progress: newProgress !== undefined ? newProgress : t.progress,
-              completed_date: newStatus === 'DONE' ? new Date().toISOString().split('T')[0] : (t.status === 'DONE' ? null : t.completed_date),
+              status: normalized.status,
+              progress: normalized.progress,
+              completed_date: normalized.completed_date,
             }
           : t
       )
@@ -161,11 +168,12 @@ export const TaskListView: React.FC = () => {
 
     try {
       await api.updateTask(taskId, {
-        status: newStatus,
-        progress: newProgress,
+        status: normalized.status,
+        progress: normalized.progress,
+        completed_date: normalized.completed_date,
         userId: currentUser?.id,
       });
-      showToast(newStatus === 'DONE' ? 'Task marked as DONE (100%)' : `Status updated to ${newStatus}`);
+      showToast(normalized.status === 'DONE' ? 'Task marked as DONE (100%)' : `Status updated to ${normalized.status}`);
     } catch (err: any) {
       showToast(`Error: ${err.message}`);
       fetchTasks();
@@ -200,12 +208,12 @@ export const TaskListView: React.FC = () => {
 
   const handleQuickProgressChange = async (taskId: string, newProgress: number) => {
     const currentTask = tasks.find((t) => t.id === taskId);
-    let calculatedStatus: TaskStatus | undefined;
-    if (newProgress === 100) {
-      calculatedStatus = 'DONE';
-    } else if (currentTask?.status === 'DONE' && newProgress < 100) {
-      calculatedStatus = newProgress === 0 ? 'TODO' : 'IN PROGRESS';
-    }
+    const normalized = normalizeTaskState({
+      progress: newProgress,
+      existingStatus: currentTask?.status,
+      existingProgress: currentTask?.progress,
+      existingCompletedDate: currentTask?.completed_date,
+    });
 
     // Optimistic local update
     setTasks((prev) =>
@@ -213,9 +221,9 @@ export const TaskListView: React.FC = () => {
         t.id === taskId
           ? {
               ...t,
-              progress: newProgress,
-              status: calculatedStatus || t.status,
-              completed_date: newProgress === 100 ? new Date().toISOString().split('T')[0] : (t.status === 'DONE' ? null : t.completed_date),
+              status: normalized.status,
+              progress: normalized.progress,
+              completed_date: normalized.completed_date,
             }
           : t
       )
@@ -223,8 +231,9 @@ export const TaskListView: React.FC = () => {
 
     try {
       await api.updateTask(taskId, {
-        progress: newProgress,
-        status: calculatedStatus,
+        progress: normalized.progress,
+        status: normalized.status,
+        completed_date: normalized.completed_date,
         userId: currentUser?.id,
       });
     } catch (err: any) {

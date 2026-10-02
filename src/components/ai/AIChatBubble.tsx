@@ -41,6 +41,8 @@ interface ChatMessage {
   text: string;
   timestamp: string;
   error?: boolean;
+  modelUsed?: string;
+  isFallback?: boolean;
 }
 
 const renderQuickPromptIcon = (iconName?: string, colorName: string = 'blue') => {
@@ -277,6 +279,8 @@ export const AIChatBubble: React.FC = () => {
         role: 'model',
         text: res.reply,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        modelUsed: res.modelUsed,
+        isFallback: res.isFallback || (res.modelUsed && res.modelUsed !== activeModel),
       };
 
       setMessages((prev) => [...prev, aiMsg]);
@@ -749,7 +753,22 @@ export const AIChatBubble: React.FC = () => {
                     <div className={`flex items-center justify-between mb-1.5 text-[10px] font-mono ${
                       isAi ? 'text-slate-500 dark:text-slate-400' : 'text-blue-100'
                     }`}>
-                      <span className="font-semibold">{isAi ? 'AI Assistant' : (currentUser?.name || 'You')}</span>
+                      <div className="flex items-center space-x-1.5">
+                        <span className="font-semibold">{isAi ? 'AI Assistant' : (currentUser?.name || 'You')}</span>
+                        {isAi && msg.modelUsed && (
+                          <span
+                            className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-mono ${
+                              msg.isFallback
+                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300/60'
+                                : 'bg-slate-100 text-slate-600 dark:bg-slate-700/60 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                            }`}
+                            title={msg.isFallback ? `Switched to fallback model: ${msg.modelUsed}` : `Active model: ${msg.modelUsed}`}
+                          >
+                            {msg.isFallback && <AlertTriangle className="w-2.5 h-2.5 text-amber-600 dark:text-amber-400 inline" />}
+                            <span>{msg.modelUsed}</span>
+                          </span>
+                        )}
+                      </div>
                       <div className="flex items-center space-x-1.5">
                         <span>{msg.timestamp}</span>
                         {isAi && (

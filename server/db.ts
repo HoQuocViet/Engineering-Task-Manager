@@ -401,6 +401,8 @@ function initSchema(database: Database): void {
   }
 }
 
+let inTransaction = false;
+
 // Query helper to return typed objects array
 export function query<T = any>(sql: string, params: any[] = []): T[] {
   if (!db) throw new Error('Database not initialized');
@@ -423,12 +425,101 @@ export function queryOne<T = any>(sql: string, params: any[] = []): T | null {
   return rows.length > 0 ? rows[0] : null;
 }
 
-// Run mutation and auto-persist to disk
+// Run mutation without disk persistence (useful in transactions or batches)
+export function runWithoutSave(sql: string, params: any[] = []): void {
+  if (!db) throw new Error('Database not initialized');
+  ensureCustomFunctions(db);
+  db.run(sql, params);
+}
+
+// Run mutation and auto-persist to disk (unless inside an active transaction)
 export function run(sql: string, params: any[] = []): void {
   if (!db) throw new Error('Database not initialized');
   ensureCustomFunctions(db);
   db.run(sql, params);
-  saveDb();
+  if (!inTransaction) {
+    saveDb();
+  }
+}
+
+/**
+ * Execute a block of database mutations inside an atomic transaction.
+ * Automatically runs BEGIN TRANSACTION, executes the action, runs COMMIT and saveDb().
+ * If an error occurs, it rolls back changes via ROLLBACK and rethrows the error without saving to disk.
+ */
+export function withTransaction<T>(action: () => T): T {
+  if (!db) throw new Error('Database not initialized');
+  ensureCustomFunctions(db);
+
+  if (inTransaction) {
+    // Nested/re-entrant call inside active transaction
+    return action();
+  }
+
+  inTransaction = true;
+  db.run('BEGIN TRANSACTION;');
+  try {
+    const result = action();
+    db.run('COMMIT;');
+    inTransaction = false;
+    saveDb();
+    return result;
+  } catch (err) {
+    try {
+      db.run('ROLLBACK;');
+    } catch (rbErr) {
+      console.error('Error rolling back SQLite transaction:', rbErr);
+    }
+    inTransaction = false;
+    throw err;
+  }
+}
+
+/**
+ * Safe helper for building parameterized IN clauses without string interpolation.
+ */
+export function safeInClause(items: any[]): { placeholders: string; params: any[] } {
+  if (!items || items.length === 0) {
+    return { placeholders: 'NULL', params: [] };
+  }
+  return {
+    placeholders: items.map(() => '?').join(','),
+    params: items,
+  };
+}
+
+/**
+ * Cleanup orphan attachment files in data/uploads/ that have no corresponding record in task_attachments.
+ */
+export function cleanupOrphanFiles(): { removed: string[]; totalOrphans: number } {
+  const removed: string[] = [];
+  try {
+    if (!fs.existsSync(UPLOADS_DIR)) {
+      return { removed: [], totalOrphans: 0 };
+    }
+
+    const recordedRows = query<{ file_name: string }>('SELECT file_name FROM task_attachments');
+    const recordedFileNames = new Set(recordedRows.map((r) => r.file_name));
+
+    const diskFiles = fs.readdirSync(UPLOADS_DIR);
+    for (const fileName of diskFiles) {
+      if (!recordedFileNames.has(fileName)) {
+        const fullPath = path.join(UPLOADS_DIR, fileName);
+        try {
+          if (fs.statSync(fullPath).isFile()) {
+            fs.unlinkSync(fullPath);
+            removed.push(fileName);
+          }
+        } catch (e) {
+          console.warn(`Could not remove orphan file ${fileName}:`, e);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error during cleanupOrphanFiles:', err);
+  }
+  return { removed, totalOrphans: removed.length };
 }
 
 export { DATA_DIR, DB_PATH, UPLOADS_DIR };
+

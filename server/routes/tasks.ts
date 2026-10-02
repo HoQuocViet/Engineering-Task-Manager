@@ -1,6 +1,8 @@
 import express, { Request, Response } from 'express';
-import { query, queryOne, run } from '../db.js';
+import { query, queryOne, run, withTransaction } from '../db.js';
 import crypto from 'crypto';
+import { normalizeTaskState } from '../../src/lib/taskStateMachine.js';
+import { deletePhysicalFile } from './attachments.js';
 
 const router = express.Router();
 
@@ -350,14 +352,14 @@ router.get('/', (req: Request, res: Response) => {
 
     // Fetch tags for these tasks
     if (tasks.length > 0) {
-      const taskIds = tasks.map((t: any) => `'${t.id}'`).join(',');
+      const placeholders = tasks.map(() => '?').join(',');
       const tagsSql = `
         SELECT tt.task_id, tg.id, tg.name, tg.color 
         FROM task_tags tt
         JOIN tags tg ON tt.tag_id = tg.id
-        WHERE tt.task_id IN (${taskIds})
+        WHERE tt.task_id IN (${placeholders})
       `;
-      const allTags = query(tagsSql);
+      const allTags = query(tagsSql, tasks.map((t: any) => t.id));
       const tagsByTaskId = new Map<string, any[]>();
       for (const tg of allTags) {
         if (!tagsByTaskId.has(tg.task_id)) tagsByTaskId.set(tg.task_id, []);
@@ -537,17 +539,17 @@ router.post('/', (req: Request, res: Response) => {
     }
 
     const now = new Date().toISOString();
-    let finalStatus = status || 'TODO';
-    let finalProgress = Number(progress) || 0;
-    if (finalStatus === 'DONE') {
-      finalProgress = 100;
-    } else if (finalStatus === 'TODO') {
-      finalProgress = 0;
-    } else {
-      finalProgress = Math.min(99, Math.max(0, finalProgress));
-      if (finalProgress === 0) finalStatus = 'TODO';
-    }
-    const completedDate = finalStatus === 'DONE' ? (new Date().toISOString().split('T')[0]) : null;
+    const today = now.split('T')[0];
+
+    // Authoritative Task State Normalization
+    const normalized = normalizeTaskState({
+      status,
+      progress,
+      today,
+    });
+    const finalStatus = normalized.status;
+    const finalProgress = normalized.progress;
+    const completedDate = normalized.completed_date;
 
     const rawStartDate = start_date !== undefined ? start_date : startDate;
     const rawForecastFinish = forecast_finish !== undefined ? forecast_finish : forecastFinish;
@@ -579,57 +581,59 @@ router.post('/', (req: Request, res: Response) => {
       ? JSON.stringify(rawPics)
       : JSON.stringify([]);
 
-    // If multi-target batch creation:
+    // Multi-target batch creation inside transaction
     if (targetItems.length > 0) {
       const generatedGroupId = group_id || `grp-${crypto.randomUUID().slice(0, 10)}`;
       const createdTaskIds: string[] = [];
 
-      for (const item of targetItems) {
-        const taskId = `tsk-${crypto.randomUUID().slice(0, 8)}`;
-        run(`
-          INSERT INTO tasks (
-            id, project_id, title, description, type, category_id, package_id, priority, status,
-            progress, start_date, deadline, forecast_finish, completed_date, assignee_id, pics, group_id,
-            created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [
-          taskId,
-          item.projectId,
-          title.trim(),
-          description ? description.trim() : '',
-          type,
-          rawCategoryId || null,
-          item.packageId,
-          priority,
-          status,
-          finalProgress,
-          rawStartDate || null,
-          deadline || null,
-          rawForecastFinish || null,
-          completedDate,
-          rawAssigneeId || null,
-          finalPics,
-          generatedGroupId,
-          now,
-          now,
-        ]);
+      withTransaction(() => {
+        for (const item of targetItems) {
+          const taskId = `tsk-${crypto.randomUUID().slice(0, 8)}`;
+          run(`
+            INSERT INTO tasks (
+              id, project_id, title, description, type, category_id, package_id, priority, status,
+              progress, start_date, deadline, forecast_finish, completed_date, assignee_id, pics, group_id,
+              created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `, [
+            taskId,
+            item.projectId,
+            title.trim(),
+            description ? description.trim() : '',
+            type,
+            rawCategoryId || null,
+            item.packageId,
+            priority,
+            finalStatus,
+            finalProgress,
+            rawStartDate || null,
+            deadline || null,
+            rawForecastFinish || null,
+            completedDate,
+            rawAssigneeId || null,
+            finalPics,
+            generatedGroupId,
+            now,
+            now,
+          ]);
 
-        if (Array.isArray(tags)) {
-          for (const tagId of tags) {
-            if (tagId) {
-              run('INSERT OR IGNORE INTO task_tags (task_id, tag_id) VALUES (?, ?)', [taskId, tagId]);
+          if (Array.isArray(tags)) {
+            for (const tagId of tags) {
+              if (tagId) {
+                run('INSERT OR IGNORE INTO task_tags (task_id, tag_id) VALUES (?, ?)', [taskId, tagId]);
+              }
             }
           }
+
+          const actId = `act-${crypto.randomUUID().slice(0, 8)}`;
+          run(`
+            INSERT INTO task_activities (id, task_id, user_id, activity_type, note, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+          `, [actId, taskId, userId || assigneeId || null, 'TASK_CREATED', `Task created as part of linked group ${generatedGroupId}`, now]);
+
+          createdTaskIds.push(taskId);
         }
-
-        const actId = `act-${crypto.randomUUID().slice(0, 8)}`;
-        run(`
-          INSERT INTO task_activities (id, task_id, user_id, activity_type, note, created_at)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `, [actId, taskId, userId || assigneeId || null, 'TASK_CREATED', `Task created as part of linked group ${generatedGroupId}`, now]);
-
-        createdTaskIds.push(taskId);
-      }
+      });
 
       return res.status(201).json({
         id: createdTaskIds[0],
@@ -640,60 +644,76 @@ router.post('/', (req: Request, res: Response) => {
       });
     }
 
-    // Otherwise, single task creation:
+    // Single task creation with database integrity verification
     const taskId = `tsk-${crypto.randomUUID().slice(0, 8)}`;
     const rawPackageId = package_id !== undefined ? package_id : packageId;
     let targetProjectId = projectId || project_id || null;
-    if (!targetProjectId && rawPackageId) {
-      const pkg = queryOne<{ project_id: string }>('SELECT project_id FROM packages WHERE id = ?', [rawPackageId]);
-      if (pkg?.project_id) {
+
+    if (rawPackageId) {
+      const pkg = queryOne<{ id: string; name: string; code: string; project_id: string | null }>(
+        'SELECT id, name, code, project_id FROM packages WHERE id = ?',
+        [rawPackageId]
+      );
+      if (!pkg) {
+        return res.status(400).json({
+          error: `Integrity Error: Package ID "${rawPackageId}" does not exist.`
+        });
+      }
+      if (pkg.project_id) {
+        if (targetProjectId && targetProjectId !== pkg.project_id) {
+          return res.status(400).json({
+            error: `Integrity Error: Package "${pkg.name}" (${pkg.code}) belongs to Project ID "${pkg.project_id}", but task project was set to "${targetProjectId}". The task's project must match the package's project.`
+          });
+        }
         targetProjectId = pkg.project_id;
       }
     }
 
-    run(`
-      INSERT INTO tasks (
-        id, project_id, title, description, type, category_id, package_id, priority, status,
-        progress, start_date, deadline, forecast_finish, completed_date, assignee_id, pics, group_id,
-        created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      taskId,
-      targetProjectId,
-      title.trim(),
-      description ? description.trim() : '',
-      type,
-      rawCategoryId || null,
-      rawPackageId || null,
-      priority,
-      status,
-      finalProgress,
-      rawStartDate || null,
-      deadline || null,
-      rawForecastFinish || null,
-      completedDate,
-      rawAssigneeId || null,
-      finalPics,
-      group_id || null,
-      now,
-      now,
-    ]);
+    withTransaction(() => {
+      run(`
+        INSERT INTO tasks (
+          id, project_id, title, description, type, category_id, package_id, priority, status,
+          progress, start_date, deadline, forecast_finish, completed_date, assignee_id, pics, group_id,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        taskId,
+        targetProjectId,
+        title.trim(),
+        description ? description.trim() : '',
+        type,
+        rawCategoryId || null,
+        rawPackageId || null,
+        priority,
+        finalStatus,
+        finalProgress,
+        rawStartDate || null,
+        deadline || null,
+        rawForecastFinish || null,
+        completedDate,
+        rawAssigneeId || null,
+        finalPics,
+        group_id || null,
+        now,
+        now,
+      ]);
 
-    // Insert tags
-    if (Array.isArray(tags)) {
-      for (const tagId of tags) {
-        if (tagId) {
-          run('INSERT OR IGNORE INTO task_tags (task_id, tag_id) VALUES (?, ?)', [taskId, tagId]);
+      // Insert tags
+      if (Array.isArray(tags)) {
+        for (const tagId of tags) {
+          if (tagId) {
+            run('INSERT OR IGNORE INTO task_tags (task_id, tag_id) VALUES (?, ?)', [taskId, tagId]);
+          }
         }
       }
-    }
 
-    // Log creation activity
-    const actId = `act-${crypto.randomUUID().slice(0, 8)}`;
-    run(`
-      INSERT INTO task_activities (id, task_id, user_id, activity_type, note, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `, [actId, taskId, userId || assigneeId || null, 'TASK_CREATED', 'Task created in system', now]);
+      // Log creation activity
+      const actId = `act-${crypto.randomUUID().slice(0, 8)}`;
+      run(`
+        INSERT INTO task_activities (id, task_id, user_id, activity_type, note, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `, [actId, taskId, userId || assigneeId || null, 'TASK_CREATED', 'Task created in system', now]);
+    });
 
     res.status(201).json({ id: taskId, group_id: group_id || null, message: 'Task created successfully' });
   } catch (err: any) {
@@ -746,63 +766,44 @@ router.put('/:id', (req: Request, res: Response) => {
     const todayYmd = getTodayYmd();
 
     const rawStartDate = start_date !== undefined ? start_date : startDate;
-    const rawForecastFinish = forecast_finish !== undefined ? forecast_finish : forecastFinish;
+    const rawForecastFinish = forecast_finish !== undefined ? (forecast_finish ? String(forecast_finish).trim() : null) : (forecastFinish !== undefined ? (forecastFinish ? String(forecastFinish).trim() : null) : undefined);
     const rawCompletedDate = completed_date !== undefined ? completed_date : completedDate;
     const rawCategoryId = category_id !== undefined ? category_id : categoryId;
     const rawPackageId = package_id !== undefined ? package_id : packageId;
     const rawAssigneeId = assignee_id !== undefined ? assignee_id : assigneeId;
     const rawProjectId = project_id !== undefined ? project_id : projectId;
 
-    let effectiveStatus = status !== undefined ? status : existing.status;
-    let effectiveProgress = progress !== undefined ? Number(progress) : existing.progress;
-    let effectiveCompletedDate = rawCompletedDate !== undefined ? rawCompletedDate : existing.completed_date;
-
-    // Intelligent Status & Progress Cross-Synchronization:
-    if (progress !== undefined && status === undefined) {
-      // Progress explicitly changed, status not provided:
-      if (effectiveProgress === 100) {
-        effectiveStatus = 'DONE';
-        if (!effectiveCompletedDate) effectiveCompletedDate = todayYmd;
-      } else if (effectiveProgress === 0) {
-        effectiveStatus = 'TODO';
-        effectiveCompletedDate = null;
-      } else if (effectiveProgress < 100 && existing.status === 'DONE') {
-        effectiveStatus = 'IN PROGRESS';
-        effectiveCompletedDate = null;
-      }
-    } else if (status !== undefined && progress === undefined) {
-      // Status explicitly changed, progress not provided:
-      if (status === 'DONE') {
-        effectiveProgress = 100;
-        if (!effectiveCompletedDate) effectiveCompletedDate = todayYmd;
-      } else if (status === 'TODO') {
-        effectiveProgress = 0;
-        effectiveCompletedDate = null;
-      } else if (existing.status === 'DONE' && status !== 'DONE') {
-        if (effectiveProgress === 100) effectiveProgress = 50;
-        effectiveCompletedDate = null;
-      }
-    } else {
-      // Both status and progress may be provided:
-      if (effectiveStatus === 'TODO') {
-        effectiveProgress = 0;
-        effectiveCompletedDate = null;
-      } else if (effectiveStatus === 'DONE') {
-        effectiveProgress = 100;
-        if (!effectiveCompletedDate) effectiveCompletedDate = todayYmd;
-      } else if (effectiveProgress === 100) {
-        effectiveStatus = 'DONE';
-        if (!effectiveCompletedDate) effectiveCompletedDate = todayYmd;
-      } else if (effectiveProgress === 0) {
-        effectiveStatus = 'TODO';
-        effectiveCompletedDate = null;
-      }
-    }
+    // Authoritative State Machine Transition
+    const normalized = normalizeTaskState({
+      status,
+      progress,
+      completedDate: rawCompletedDate,
+      existingStatus: existing.status,
+      existingProgress: existing.progress,
+      existingCompletedDate: existing.completed_date,
+      today: todayYmd,
+    });
+    const effectiveStatus = normalized.status;
+    const effectiveProgress = normalized.progress;
+    const effectiveCompletedDate = normalized.completed_date;
 
     let targetProjectId = rawProjectId !== undefined ? rawProjectId : existing.project_id;
-    if (!targetProjectId && rawPackageId && rawPackageId !== existing.package_id) {
-      const pkg = queryOne<{ project_id: string }>('SELECT project_id FROM packages WHERE id = ?', [rawPackageId]);
-      if (pkg?.project_id) {
+    if (rawPackageId) {
+      const pkg = queryOne<{ id: string; name: string; code: string; project_id: string | null }>(
+        'SELECT id, name, code, project_id FROM packages WHERE id = ?',
+        [rawPackageId]
+      );
+      if (!pkg) {
+        return res.status(400).json({
+          error: `Integrity Error: Package ID "${rawPackageId}" does not exist.`
+        });
+      }
+      if (pkg.project_id) {
+        if (targetProjectId && targetProjectId !== pkg.project_id) {
+          return res.status(400).json({
+            error: `Integrity Error: Package "${pkg.name}" (${pkg.code}) belongs to Project ID "${pkg.project_id}", but task project was set to "${targetProjectId}". The task's project must match the package's project.`
+          });
+        }
         targetProjectId = pkg.project_id;
       }
     }
@@ -810,17 +811,17 @@ router.put('/:id', (req: Request, res: Response) => {
     // Activity tracking
     const activitiesToLog: Array<{ type: string; field: string; oldVal: any; newVal: any; note: string }> = [];
 
-    if (status !== undefined && status !== existing.status) {
+    if (effectiveStatus !== existing.status) {
       activitiesToLog.push({
-        type: status === 'DONE' ? 'TASK_COMPLETED' : 'STATUS_CHANGED',
+        type: effectiveStatus === 'DONE' ? 'TASK_COMPLETED' : 'STATUS_CHANGED',
         field: 'status',
         oldVal: existing.status,
-        newVal: status,
-        note: `Status changed from ${existing.status} to ${status}`,
+        newVal: effectiveStatus,
+        note: `Status changed from ${existing.status} to ${effectiveStatus}`,
       });
     }
 
-    if (progress !== undefined && effectiveProgress !== existing.progress) {
+    if (effectiveProgress !== existing.progress) {
       activitiesToLog.push({
         type: 'PROGRESS_CHANGED',
         field: 'progress',
@@ -850,20 +851,43 @@ router.put('/:id', (req: Request, res: Response) => {
       });
     }
 
+    // Authoritative Forecast Revision Logic (Section 11)
     let effectiveForecastRevisionCount = Number(existing.forecast_revision_count) || 0;
+    const finalForecastValue = rawForecastFinish !== undefined ? rawForecastFinish : existing.forecast_finish;
+
     if (rawForecastFinish !== undefined && rawForecastFinish !== existing.forecast_finish) {
-      if (existing.forecast_finish !== null || effectiveForecastRevisionCount > 0) {
+      const hadExistingForecast = Boolean(existing.forecast_finish && existing.forecast_finish.trim() !== '');
+      const hasNewForecast = Boolean(rawForecastFinish && rawForecastFinish.trim() !== '');
+
+      if (!hadExistingForecast && hasNewForecast) {
+        // Initial forecast: revision count remains 0
+        activitiesToLog.push({
+          type: 'FORECAST_CHANGED',
+          field: 'forecast_finish',
+          oldVal: existing.forecast_finish || 'None',
+          newVal: rawForecastFinish,
+          note: `Initial forecast finish date set to ${rawForecastFinish}`,
+        });
+      } else if (hadExistingForecast && hasNewForecast) {
+        // Revision #1, #2, etc.
         effectiveForecastRevisionCount += 1;
+        activitiesToLog.push({
+          type: 'FORECAST_CHANGED',
+          field: 'forecast_finish',
+          oldVal: existing.forecast_finish || 'None',
+          newVal: rawForecastFinish,
+          note: `Forecast finish date revised to ${rawForecastFinish} (Revision #${effectiveForecastRevisionCount})`,
+        });
+      } else if (hadExistingForecast && !hasNewForecast) {
+        // Cleared forecast: no revision count increment
+        activitiesToLog.push({
+          type: 'FORECAST_CHANGED',
+          field: 'forecast_finish',
+          oldVal: existing.forecast_finish,
+          newVal: 'None',
+          note: 'Forecast finish date cleared',
+        });
       }
-      activitiesToLog.push({
-        type: 'FORECAST_CHANGED',
-        field: 'forecast_finish',
-        oldVal: existing.forecast_finish || 'None',
-        newVal: rawForecastFinish || 'None',
-        note: (existing.forecast_finish !== null || effectiveForecastRevisionCount > 0)
-          ? `Forecast finish date revised to ${rawForecastFinish || 'None'} (Revision #${effectiveForecastRevisionCount})`
-          : `Initial forecast finish date set to ${rawForecastFinish || 'None'}`,
-      });
     }
 
     if (rawStartDate !== undefined && rawStartDate !== existing.start_date) {
@@ -876,195 +900,197 @@ router.put('/:id', (req: Request, res: Response) => {
       });
     }
 
-    // Update query
-    run(`
-      UPDATE tasks SET
-        project_id = ?,
-        title = ?,
-        description = ?,
-        type = ?,
-        category_id = ?,
-        package_id = ?,
-        priority = ?,
-        status = ?,
-        progress = ?,
-        start_date = ?,
-        deadline = ?,
-        forecast_finish = ?,
-        forecast_revision_count = ?,
-        completed_date = ?,
-        assignee_id = ?,
-        pics = ?,
-        updated_at = ?
-      WHERE id = ?
-    `, [
-      targetProjectId || null,
-      title !== undefined ? title.trim() : existing.title,
-      description !== undefined ? description : existing.description,
-      type !== undefined ? type : existing.type,
-      rawCategoryId !== undefined ? (rawCategoryId || null) : existing.category_id,
-      rawPackageId !== undefined ? (rawPackageId || null) : existing.package_id,
-      priority !== undefined ? priority : existing.priority,
-      effectiveStatus,
-      effectiveProgress,
-      rawStartDate !== undefined ? (rawStartDate || null) : existing.start_date,
-      deadline !== undefined ? (deadline || null) : existing.deadline,
-      rawForecastFinish !== undefined ? (rawForecastFinish || null) : existing.forecast_finish,
-      effectiveForecastRevisionCount,
-      effectiveCompletedDate,
-      rawAssigneeId !== undefined ? (rawAssigneeId || null) : existing.assignee_id,
-      req.body.pics !== undefined
-        ? (Array.isArray(req.body.pics) ? JSON.stringify(req.body.pics) : String(req.body.pics))
-        : existing.pics,
-      now,
-      id,
-    ]);
-
-    // Update tags if provided
-    if (Array.isArray(tags)) {
-      run('DELETE FROM task_tags WHERE task_id = ?', [id]);
-      for (const tagId of tags) {
-        if (tagId) {
-          run('INSERT OR IGNORE INTO task_tags (task_id, tag_id) VALUES (?, ?)', [id, tagId]);
-        }
-      }
-    }
-
-    // Log activities
-    for (const act of activitiesToLog) {
-      const actId = `act-${crypto.randomUUID().slice(0, 8)}`;
-      run(`
-        INSERT INTO task_activities (id, task_id, user_id, activity_type, field_name, old_value, new_value, note, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `, [actId, id, userId || existing.assignee_id || null, act.type, act.field, String(act.oldVal), String(act.newVal), act.note, now]);
-    }
-
-    // --- Linked Group Synchronization Logic ---
-    // If the task wasn't in a group, but the user now selected multiple packages to link:
     let activeGroupId = existing.group_id;
     if (!activeGroupId && Array.isArray(syncGroupPackages) && syncGroupPackages.length > 1) {
       activeGroupId = `grp-${crypto.randomUUID().slice(0, 10)}`;
-      run('UPDATE tasks SET group_id = ? WHERE id = ?', [activeGroupId, id]);
     }
 
-    if (activeGroupId && (syncGroup || Array.isArray(syncGroupPackages))) {
-      const sharedTitle = title !== undefined ? title.trim() : existing.title;
-      const sharedDesc = description !== undefined ? description : existing.description;
-      const sharedType = type !== undefined ? type : existing.type;
-      const sharedCategoryId = rawCategoryId !== undefined ? (rawCategoryId || null) : existing.category_id;
-      const sharedPriority = priority !== undefined ? priority : existing.priority;
-
-      // 1. Sync common fields to all sibling tasks in this group (Title, Description, Type, Category, Priority, PICs)
-      if (syncGroup) {
-        const sharedPics = req.body.pics !== undefined
+    withTransaction(() => {
+      // Update target task
+      run(`
+        UPDATE tasks SET
+          project_id = ?,
+          title = ?,
+          description = ?,
+          type = ?,
+          category_id = ?,
+          package_id = ?,
+          priority = ?,
+          status = ?,
+          progress = ?,
+          start_date = ?,
+          deadline = ?,
+          forecast_finish = ?,
+          forecast_revision_count = ?,
+          completed_date = ?,
+          assignee_id = ?,
+          pics = ?,
+          group_id = ?,
+          updated_at = ?
+        WHERE id = ?
+      `, [
+        targetProjectId || null,
+        title !== undefined ? title.trim() : existing.title,
+        description !== undefined ? description : existing.description,
+        type !== undefined ? type : existing.type,
+        rawCategoryId !== undefined ? (rawCategoryId || null) : existing.category_id,
+        rawPackageId !== undefined ? (rawPackageId || null) : existing.package_id,
+        priority !== undefined ? priority : existing.priority,
+        effectiveStatus,
+        effectiveProgress,
+        rawStartDate !== undefined ? (rawStartDate || null) : existing.start_date,
+        deadline !== undefined ? (deadline || null) : existing.deadline,
+        finalForecastValue || null,
+        effectiveForecastRevisionCount,
+        effectiveCompletedDate,
+        rawAssigneeId !== undefined ? (rawAssigneeId || null) : existing.assignee_id,
+        req.body.pics !== undefined
           ? (Array.isArray(req.body.pics) ? JSON.stringify(req.body.pics) : String(req.body.pics))
-          : null;
+          : existing.pics,
+        activeGroupId || null,
+        now,
+        id,
+      ]);
 
-        run(`
-          UPDATE tasks SET
-            title = ?,
-            description = ?,
-            type = ?,
-            category_id = ?,
-            priority = ?,
-            pics = COALESCE(?, pics),
-            updated_at = ?
-          WHERE group_id = ? AND id != ?
-        `, [
-          sharedTitle,
-          sharedDesc,
-          sharedType,
-          sharedCategoryId,
-          sharedPriority,
-          sharedPics,
-          now,
-          activeGroupId,
-          id,
-        ]);
-
-        // Sync tags to sibling tasks
-        if (Array.isArray(tags)) {
-          const siblingTasks = query<{ id: string }>('SELECT id FROM tasks WHERE group_id = ? AND id != ?', [activeGroupId, id]);
-          for (const sib of siblingTasks) {
-            run('DELETE FROM task_tags WHERE task_id = ?', [sib.id]);
-            for (const tagId of tags) {
-              if (tagId) {
-                run('INSERT OR IGNORE INTO task_tags (task_id, tag_id) VALUES (?, ?)', [sib.id, tagId]);
-              }
-            }
+      // Update tags if provided
+      if (Array.isArray(tags)) {
+        run('DELETE FROM task_tags WHERE task_id = ?', [id]);
+        for (const tagId of tags) {
+          if (tagId) {
+            run('INSERT OR IGNORE INTO task_tags (task_id, tag_id) VALUES (?, ?)', [id, tagId]);
           }
         }
       }
 
-      // 2. Sync group packages (Add newly selected packages, remove/unlink deselected packages)
-      if (Array.isArray(syncGroupPackages)) {
-        const groupTasks = query<{ id: string; package_id: string | null }>(
-          'SELECT id, package_id FROM tasks WHERE group_id = ?',
-          [activeGroupId]
-        );
-        const currentPackageIds = groupTasks.filter((t) => t.package_id).map((t) => t.package_id as string);
+      // Log activities
+      for (const act of activitiesToLog) {
+        const actId = `act-${crypto.randomUUID().slice(0, 8)}`;
+        run(`
+          INSERT INTO task_activities (id, task_id, user_id, activity_type, field_name, old_value, new_value, note, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [actId, id, userId || existing.assignee_id || null, act.type, act.field, String(act.oldVal), String(act.newVal), act.note, now]);
+      }
 
-        // A. Add tasks for newly selected packages:
-        const packagesToAdd = syncGroupPackages.filter((pId) => !currentPackageIds.includes(pId));
-        for (const newPkgId of packagesToAdd) {
-          const pkg = queryOne<{ project_id: string }>('SELECT project_id FROM packages WHERE id = ?', [newPkgId]);
-          const newTaskId = `tsk-${crypto.randomUUID().slice(0, 8)}`;
+      // --- Linked Group Synchronization Logic ---
+      if (activeGroupId && (syncGroup || Array.isArray(syncGroupPackages))) {
+        const sharedTitle = title !== undefined ? title.trim() : existing.title;
+        const sharedDesc = description !== undefined ? description : existing.description;
+        const sharedType = type !== undefined ? type : existing.type;
+        const sharedCategoryId = rawCategoryId !== undefined ? (rawCategoryId || null) : existing.category_id;
+        const sharedPriority = priority !== undefined ? priority : existing.priority;
+        const sharedPics = req.body.pics !== undefined
+          ? (Array.isArray(req.body.pics) ? JSON.stringify(req.body.pics) : String(req.body.pics))
+          : existing.pics;
+
+        // 1. Sync shared fields to all sibling tasks in this group
+        if (syncGroup) {
           run(`
-            INSERT INTO tasks (
-              id, project_id, title, description, type, category_id, package_id, priority, status,
-              progress, start_date, deadline, forecast_finish, completed_date, assignee_id, group_id,
-              created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            UPDATE tasks SET
+              title = ?,
+              description = ?,
+              type = ?,
+              category_id = ?,
+              priority = ?,
+              pics = COALESCE(?, pics),
+              updated_at = ?
+            WHERE group_id = ? AND id != ?
           `, [
-            newTaskId,
-            pkg?.project_id || null,
             sharedTitle,
             sharedDesc,
             sharedType,
             sharedCategoryId,
-            newPkgId,
             sharedPriority,
-            'TODO',
-            0,
-            rawStartDate || null,
-            deadline || null,
-            rawForecastFinish || null,
-            null,
-            null,
+            sharedPics,
+            now,
             activeGroupId,
-            now,
-            now,
+            id,
           ]);
 
+          // Sync tags to sibling tasks
           if (Array.isArray(tags)) {
-            for (const tagId of tags) {
+            const siblingTasks = query<{ id: string }>('SELECT id FROM tasks WHERE group_id = ? AND id != ?', [activeGroupId, id]);
+            for (const sib of siblingTasks) {
+              run('DELETE FROM task_tags WHERE task_id = ?', [sib.id]);
+              for (const tagId of tags) {
+                if (tagId) {
+                  run('INSERT OR IGNORE INTO task_tags (task_id, tag_id) VALUES (?, ?)', [sib.id, tagId]);
+                }
+              }
+            }
+          }
+        }
+
+        // 2. Sync group packages (Add newly selected packages, remove/unlink deselected packages)
+        if (Array.isArray(syncGroupPackages)) {
+          const groupTasks = query<{ id: string; package_id: string | null }>(
+            'SELECT id, package_id FROM tasks WHERE group_id = ?',
+            [activeGroupId]
+          );
+          const currentPackageIds = groupTasks.filter((t) => t.package_id).map((t) => t.package_id as string);
+
+          // A. Add tasks for newly selected packages:
+          // Strictly inherit PIC, assignee, tags, priority, category, title, description (Section 7)
+          const packagesToAdd = syncGroupPackages.filter((pId) => !currentPackageIds.includes(pId));
+          const effectiveAssignee = rawAssigneeId !== undefined ? rawAssigneeId : existing.assignee_id;
+          const currentTags = Array.isArray(tags) ? tags : query<{ tag_id: string }>('SELECT tag_id FROM task_tags WHERE task_id = ?', [id]).map((t) => t.tag_id);
+
+          for (const newPkgId of packagesToAdd) {
+            const pkg = queryOne<{ project_id: string }>('SELECT project_id FROM packages WHERE id = ?', [newPkgId]);
+            const newTaskId = `tsk-${crypto.randomUUID().slice(0, 8)}`;
+            run(`
+              INSERT INTO tasks (
+                id, project_id, title, description, type, category_id, package_id, priority, status,
+                progress, start_date, deadline, forecast_finish, completed_date, assignee_id, pics, group_id,
+                created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `, [
+              newTaskId,
+              pkg?.project_id || null,
+              sharedTitle,
+              sharedDesc,
+              sharedType,
+              sharedCategoryId,
+              newPkgId,
+              sharedPriority,
+              'TODO',
+              0,
+              rawStartDate || null,
+              deadline || null,
+              finalForecastValue || null,
+              null,
+              effectiveAssignee || null,
+              sharedPics,
+              activeGroupId,
+              now,
+              now,
+            ]);
+
+            for (const tagId of currentTags) {
               if (tagId) {
                 run('INSERT OR IGNORE INTO task_tags (task_id, tag_id) VALUES (?, ?)', [newTaskId, tagId]);
               }
             }
+
+            const actId = `act-${crypto.randomUUID().slice(0, 8)}`;
+            run(`
+              INSERT INTO task_activities (id, task_id, user_id, activity_type, note, created_at)
+              VALUES (?, ?, ?, ?, ?, ?)
+            `, [actId, newTaskId, userId || null, 'TASK_CREATED', `Task added to linked group ${activeGroupId}`, now]);
           }
 
-          const actId = `act-${crypto.randomUUID().slice(0, 8)}`;
-          run(`
-            INSERT INTO task_activities (id, task_id, user_id, activity_type, note, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-          `, [actId, newTaskId, userId || null, 'TASK_CREATED', `Task added to linked group ${activeGroupId}`, now]);
-        }
-
-        // B. Remove tasks for deselected packages:
-        const packagesToRemove = currentPackageIds.filter((pId) => !syncGroupPackages.includes(pId));
-        for (const remPkgId of packagesToRemove) {
-          // Do not delete/unlink the task currently being directly updated!
-          if (existing.package_id === remPkgId) continue;
-          if (removeMode === 'delete') {
-            run('DELETE FROM tasks WHERE group_id = ? AND package_id = ?', [activeGroupId, remPkgId]);
-          } else {
-            // Default: unlink from group
-            run('UPDATE tasks SET group_id = NULL WHERE group_id = ? AND package_id = ?', [activeGroupId, remPkgId]);
+          // B. Remove tasks for deselected packages:
+          const packagesToRemove = currentPackageIds.filter((pId) => !syncGroupPackages.includes(pId));
+          for (const remPkgId of packagesToRemove) {
+            if (existing.package_id === remPkgId) continue;
+            if (removeMode === 'delete') {
+              run('DELETE FROM tasks WHERE group_id = ? AND package_id = ?', [activeGroupId, remPkgId]);
+            } else {
+              run('UPDATE tasks SET group_id = NULL WHERE group_id = ? AND package_id = ?', [activeGroupId, remPkgId]);
+            }
           }
         }
       }
-    }
+    });
 
     res.json({ message: 'Task updated successfully', group_id: activeGroupId });
   } catch (err: any) {
@@ -1088,8 +1114,28 @@ router.post('/:id/unlink-group', (req: Request, res: Response) => {
 router.delete('/:id', (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    run('DELETE FROM tasks WHERE id = ?', [id]);
-    res.json({ message: 'Task deleted successfully' });
+    const task = queryOne('SELECT id FROM tasks WHERE id = ?', [id]);
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    // 1. Query physical attachment files for this task before deleting DB records
+    const attachments = query<{ file_path: string; file_name: string }>(
+      'SELECT file_path, file_name FROM task_attachments WHERE task_id = ?',
+      [id]
+    );
+
+    // 2. Perform DB delete in atomic transaction (cascades to attachments, tags, comments, activities)
+    withTransaction(() => {
+      run('DELETE FROM tasks WHERE id = ?', [id]);
+    });
+
+    // 3. Delete physical files from disk only after DB transaction has committed
+    for (const att of attachments) {
+      deletePhysicalFile(att.file_path, att.file_name);
+    }
+
+    res.json({ message: 'Task and associated attachments deleted successfully' });
   } catch (err: any) {
     console.error('Error deleting task:', err);
     res.status(500).json({ error: err.message });
@@ -1109,20 +1155,22 @@ router.post('/:id/comments', (req: Request, res: Response) => {
     const commentId = `cmt-${crypto.randomUUID().slice(0, 8)}`;
     const now = new Date().toISOString();
 
-    run(`
-      INSERT INTO task_comments (id, task_id, user_id, content, created_at)
-      VALUES (?, ?, ?, ?, ?)
-    `, [commentId, id, userId || null, content.trim(), now]);
+    withTransaction(() => {
+      run(`
+        INSERT INTO task_comments (id, task_id, user_id, content, created_at)
+        VALUES (?, ?, ?, ?, ?)
+      `, [commentId, id, userId || null, content.trim(), now]);
 
-    // Log activity
-    const actId = `act-${crypto.randomUUID().slice(0, 8)}`;
-    run(`
-      INSERT INTO task_activities (id, task_id, user_id, activity_type, note, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `, [actId, id, userId || null, 'COMMENT_ADDED', `Added note/comment: ${content.trim().slice(0, 60)}...`, now]);
+      // Log activity
+      const actId = `act-${crypto.randomUUID().slice(0, 8)}`;
+      run(`
+        INSERT INTO task_activities (id, task_id, user_id, activity_type, note, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `, [actId, id, userId || null, 'COMMENT_ADDED', `Added note/comment: ${content.trim().slice(0, 60)}...`, now]);
 
-    // Touch task updated_at
-    run('UPDATE tasks SET updated_at = ? WHERE id = ?', [now, id]);
+      // Touch task updated_at
+      run('UPDATE tasks SET updated_at = ? WHERE id = ?', [now, id]);
+    });
 
     res.status(201).json({ id: commentId, message: 'Comment added' });
   } catch (err: any) {
@@ -1147,16 +1195,18 @@ router.put('/:id/comments/:commentId', (req: Request, res: Response) => {
     }
 
     const now = new Date().toISOString();
-    run('UPDATE task_comments SET content = ? WHERE id = ? AND task_id = ?', [content.trim(), commentId, id]);
+    withTransaction(() => {
+      run('UPDATE task_comments SET content = ? WHERE id = ? AND task_id = ?', [content.trim(), commentId, id]);
 
-    // Log activity
-    const actId = `act-${crypto.randomUUID().slice(0, 8)}`;
-    run(`
-      INSERT INTO task_activities (id, task_id, user_id, activity_type, note, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `, [actId, id, userId || null, 'COMMENT_UPDATED', `Updated note/comment: ${content.trim().slice(0, 60)}...`, now]);
+      // Log activity
+      const actId = `act-${crypto.randomUUID().slice(0, 8)}`;
+      run(`
+        INSERT INTO task_activities (id, task_id, user_id, activity_type, note, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `, [actId, id, userId || null, 'COMMENT_UPDATED', `Updated note/comment: ${content.trim().slice(0, 60)}...`, now]);
 
-    run('UPDATE tasks SET updated_at = ? WHERE id = ?', [now, id]);
+      run('UPDATE tasks SET updated_at = ? WHERE id = ?', [now, id]);
+    });
 
     res.json({ message: 'Comment updated successfully' });
   } catch (err: any) {
@@ -1176,16 +1226,18 @@ router.delete('/:id/comments/:commentId', (req: Request, res: Response) => {
     }
 
     const now = new Date().toISOString();
-    run('DELETE FROM task_comments WHERE id = ? AND task_id = ?', [commentId, id]);
+    withTransaction(() => {
+      run('DELETE FROM task_comments WHERE id = ? AND task_id = ?', [commentId, id]);
 
-    // Log activity
-    const actId = `act-${crypto.randomUUID().slice(0, 8)}`;
-    run(`
-      INSERT INTO task_activities (id, task_id, user_id, activity_type, note, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `, [actId, id, null, 'COMMENT_DELETED', 'Deleted a technical note/comment', now]);
+      // Log activity
+      const actId = `act-${crypto.randomUUID().slice(0, 8)}`;
+      run(`
+        INSERT INTO task_activities (id, task_id, user_id, activity_type, note, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `, [actId, id, null, 'COMMENT_DELETED', 'Deleted a technical note/comment', now]);
 
-    run('UPDATE tasks SET updated_at = ? WHERE id = ?', [now, id]);
+      run('UPDATE tasks SET updated_at = ? WHERE id = ?', [now, id]);
+    });
 
     res.json({ message: 'Comment deleted successfully' });
   } catch (err: any) {
@@ -1199,39 +1251,97 @@ router.post('/bulk', (req: Request, res: Response) => {
   try {
     const { taskIds, action, value, userId } = req.body;
     if (!Array.isArray(taskIds) || taskIds.length === 0) {
-      return res.status(400).json({ error: 'taskIds array is required' });
+      return res.status(400).json({ error: 'taskIds array is required and cannot be empty' });
+    }
+
+    const validActions = ['MARK_DONE', 'SET_STATUS', 'SET_PRIORITY', 'DELETE'];
+    if (!validActions.includes(action)) {
+      return res.status(400).json({ error: `Invalid action "${action}". Allowed: ${validActions.join(', ')}` });
+    }
+
+    if (action === 'SET_STATUS') {
+      const validStatuses = ['TODO', 'IN PROGRESS', 'WAITING', 'ON HOLD', 'DONE', 'CANCELLED'];
+      if (!validStatuses.includes(value)) {
+        return res.status(400).json({ error: `Invalid status "${value}". Allowed: ${validStatuses.join(', ')}` });
+      }
+    }
+
+    if (action === 'SET_PRIORITY') {
+      const validPriorities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+      if (!validPriorities.includes(value)) {
+        return res.status(400).json({ error: `Invalid priority "${value}". Allowed: ${validPriorities.join(', ')}` });
+      }
     }
 
     const now = new Date().toISOString();
     const today = getTodayYmd();
+    const filesToDelete: Array<{ file_path: string; file_name: string }> = [];
 
-    for (const id of taskIds) {
-      if (action === 'MARK_DONE') {
-        run(`
-          UPDATE tasks SET status = 'DONE', progress = 100, completed_date = ?, updated_at = ?
-          WHERE id = ?
-        `, [today, now, id]);
+    withTransaction(() => {
+      for (const id of taskIds) {
+        const existing = queryOne('SELECT * FROM tasks WHERE id = ?', [id]);
+        if (!existing) continue;
 
-        const actId = `act-${crypto.randomUUID().slice(0, 8)}`;
-        run(`
-          INSERT INTO task_activities (id, task_id, user_id, activity_type, field_name, new_value, note, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `, [actId, id, userId || null, 'TASK_COMPLETED', 'status', 'DONE', 'Bulk marked as complete', now]);
-      } else if (action === 'SET_PRIORITY') {
-        run('UPDATE tasks SET priority = ?, updated_at = ? WHERE id = ?', [value, now, id]);
-      } else if (action === 'SET_STATUS') {
-        const prog = value === 'DONE' ? 100 : undefined;
-        if (prog !== undefined) {
-          run('UPDATE tasks SET status = ?, progress = 100, completed_date = ?, updated_at = ? WHERE id = ?', [value, today, now, id]);
-        } else {
-          run('UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?', [value, now, id]);
+        if (action === 'MARK_DONE') {
+          const normalized = normalizeTaskState({
+            status: 'DONE',
+            existingStatus: existing.status,
+            existingProgress: existing.progress,
+            today,
+          });
+          run(
+            'UPDATE tasks SET status = ?, progress = ?, completed_date = ?, updated_at = ? WHERE id = ?',
+            [normalized.status, normalized.progress, normalized.completed_date, now, id]
+          );
+
+          const actId = `act-${crypto.randomUUID().slice(0, 8)}`;
+          run(`
+            INSERT INTO task_activities (id, task_id, user_id, activity_type, field_name, new_value, note, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `, [actId, id, userId || null, 'TASK_COMPLETED', 'status', 'DONE', 'Bulk marked as complete', now]);
+        } else if (action === 'SET_STATUS') {
+          const normalized = normalizeTaskState({
+            status: value,
+            existingStatus: existing.status,
+            existingProgress: existing.progress,
+            today,
+          });
+          run(
+            'UPDATE tasks SET status = ?, progress = ?, completed_date = ?, updated_at = ? WHERE id = ?',
+            [normalized.status, normalized.progress, normalized.completed_date, now, id]
+          );
+
+          const actId = `act-${crypto.randomUUID().slice(0, 8)}`;
+          run(`
+            INSERT INTO task_activities (id, task_id, user_id, activity_type, field_name, old_value, new_value, note, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `, [actId, id, userId || null, normalized.status === 'DONE' ? 'TASK_COMPLETED' : 'STATUS_CHANGED', 'status', existing.status, normalized.status, `Bulk status change to ${normalized.status}`, now]);
+        } else if (action === 'SET_PRIORITY') {
+          run('UPDATE tasks SET priority = ?, updated_at = ? WHERE id = ?', [value, now, id]);
+
+          const actId = `act-${crypto.randomUUID().slice(0, 8)}`;
+          run(`
+            INSERT INTO task_activities (id, task_id, user_id, activity_type, field_name, old_value, new_value, note, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `, [actId, id, userId || null, 'PRIORITY_CHANGED', 'priority', existing.priority, value, `Bulk priority change to ${value}`, now]);
+        } else if (action === 'DELETE') {
+          const atts = query<{ file_path: string; file_name: string }>(
+            'SELECT file_path, file_name FROM task_attachments WHERE task_id = ?',
+            [id]
+          );
+          filesToDelete.push(...atts);
+          run('DELETE FROM tasks WHERE id = ?', [id]);
         }
-      } else if (action === 'DELETE') {
-        run('DELETE FROM tasks WHERE id = ?', [id]);
+      }
+    });
+
+    if (action === 'DELETE' && filesToDelete.length > 0) {
+      for (const att of filesToDelete) {
+        deletePhysicalFile(att.file_path, att.file_name);
       }
     }
 
-    res.json({ message: `Updated ${taskIds.length} tasks successfully` });
+    res.json({ message: `Bulk action "${action}" completed successfully on ${taskIds.length} tasks` });
   } catch (err: any) {
     console.error('Error performing bulk action:', err);
     res.status(500).json({ error: err.message });

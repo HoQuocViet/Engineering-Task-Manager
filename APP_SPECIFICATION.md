@@ -469,7 +469,7 @@ All major views must feature a consistent 62px-height top banner adhering to the
 All endpoints are hosted under the `/api` prefix.
 
 ### 6.1 Tasks & Work Deliverables
-- `GET /api/tasks`: Query parameters: `search`, `status`, `priority`, `projectId`, `packageId`, `categoryId`, `assigneeId`, `overdue`. Returns array of enriched tasks with tags, subtasks count, and assignee info.
+- `GET /api/tasks`: Query parameters: `search`, `status`, `priority`, `projectId`, `packageId`, `categoryId`, `assigneeId`, `pic`, `overdue`. Returns array of enriched tasks with tags, subtasks count, and assignee info, sorted strictly by `created_at DESC`.
 - `POST /api/tasks`: Create task. Payload: `{ title, description, projectId, packageId, categoryId, assigneeId, priority, status, deadline, startDate }`. Automatically logs creation in `task_activities`.
 - `GET /api/tasks/:id`: Returns complete task object including subtasks, file attachments, comment thread, and chronological audit history.
 - `PATCH /api/tasks/:id`: Partial update of task attributes (`status`, `progress`, `priority`, `deadline`, etc.). Emits activity log for modified fields.
@@ -557,7 +557,10 @@ npm run build
 # 4. Run static type checking and linting
 npm run lint
 
-# 5. Start production server
+# 5. Run automated regression test suite
+npm test
+
+# 6. Start production server
 npm start
 ```
 
@@ -572,14 +575,24 @@ npm start
 2. **Action Column Ergonomics**:
    - Gỡ bỏ icon con mắt xem chi tiết (người dùng mở modal bằng phím Enter hoặc đúp chuột).
    - Sắp xếp nút *Mark as Done* (`CheckCircle2`) ở trên và *Delete* (`Trash2`) ở dưới theo chiều dọc (`flex-col`), căn giữa gọn gàng trong cột hẹp `w-[44px]`.
-3. **Persons In Charge (PIC) Column Architecture**:
+3. **Persons In Charge (PIC) Column Architecture & Roster Synchronization**:
    - Tăng kích thước cột PIC lên `w-[84px]`, chuyển toàn bộ sang căn lề trái (`text-left`, `justify-start`) ở Header, Hộp lọc và Dữ liệu từng hàng.
    - Hiển thị tối đa 3 hình tròn avatar xếp chồng đè nhau (`-space-x-1.5`), có badge `+N` khi nhiều hơn 3 người.
    - Khắc phục lỗi item chưa gán PIC bị tự ý gán avatar của user: khi chưa có ai, hiển thị nút hình tròn dấu cộng nét đứt nhỏ nhắn `+`, danh sách `pics` trả về `[]`.
-4. **Accurate PIC Filtering**:
+   - **Đồng bộ chuẩn xác số lượng PIC**: Khắc phục lệch số đếm giữa `SYSTEM & WORKSPACE SETTINGS` (9 thành viên) và danh sách hiển thị trên tasklist.
+   - **Chuẩn hóa ứng viên (PIC Deduplication & Normalization)**: Xử lý triệt để hiện tượng phân mảnh/nhân bản tên giữa `Ho Quoc Viet` và `Ho Quoc Viet (Tôi)`, đảm bảo bộ lọc và dropdown hiển thị đúng tên quy chuẩn duy nhất.
+4. **Accurate PIC Filtering & Diacritics Matching**:
    - Sửa truy vấn backend: loại bỏ `OR u.name LIKE ?` để tránh lọc nhầm các task chỉ do user tạo nhưng chưa được phân công PIC.
+   - Sử dụng hàm SQLite `VI_MATCH` chuẩn hóa Unicode/NFD không dấu, cho phép lọc chính xác 100% công việc theo từng PIC.
    - Hỗ trợ lọc chuyên biệt cho tùy chọn `Unassigned` để lọc chính xác tất cả các task chưa gán người phụ trách.
-5. **Dedicated Persons In Charge (PIC) Settings Tab**:
+5. **Strict Task Ordering (Business Rule 2.1) & Automated Regression Tests**:
+   - Chuẩn hóa thứ tự mặc định toàn hệ thống theo **`created_at DESC`** (công việc mới tạo luôn nằm trên cùng).
+   - Chỉnh sửa công việc (Priority, Status, Deadline, Forecast, PIC, Category, Tag) tuyệt đối không làm nhảy vị trí của công việc.
+   - Đã xây dựng bộ kiểm thử hồi quy tự động (`tests/regression_tests.ts`) chạy qua lệnh `npm test` xác thực:
+     - Logic thứ tự tạo trước/sau `[B, A] -> Edit A -> [B, A] -> Tạo C -> [C, B, A]`.
+     - Chuẩn hóa khử trùng lặp PIC.
+     - Lọc dữ liệu qua API backend trực tiếp.
+6. **Dedicated Persons In Charge (PIC) Settings Tab**:
    - Tách thành tab riêng **Persons In Charge (PIC)** (`PicsSettingsTab.tsx`) trong Settings, đặt ngang hàng với **Engineer Profile**.
    - Hỗ trợ **click trực tiếp lên hình tròn avatar** để mở hộp thoại tải ảnh/thay đổi ảnh đại diện (bỏ nút nhấn riêng).
    - Cho phép click trực tiếp lên avatar của từng thành viên ngay trong danh sách bên phải để cập nhật ảnh tức thì.
@@ -600,4 +613,5 @@ npm start
    - Tự động nén và resize ảnh chụp avatar về kích thước chuẩn (128x128px) trước khi chuyển thành base64 để tối ưu hóa bộ nhớ SQLite.
 4. **Multi-Select PIC Filter (Bộ lọc đa chọn PIC)**:
    - Nâng cấp bộ lọc tại header cho phép chọn nhiều PIC cùng lúc (lọc theo nhóm kỹ sư phụ trách).
+
 
