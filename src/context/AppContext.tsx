@@ -8,6 +8,8 @@ export type ActiveView =
   | 'projects' 
   | 'packages' 
   | 'tasks' 
+  | 'follow_up'
+  | 'bulletins'
   | 'calendar' 
   | 'tags' 
   | 'settings' 
@@ -92,6 +94,13 @@ interface AppContextType {
   setAiSettings: (settings: AISettings) => void;
   isAiChatOpen: boolean;
   setIsAiChatOpen: (open: boolean) => void;
+  // Sidebar Pin & Responsive Collapse State
+  isSidebarPinned: boolean;
+  setIsSidebarPinned: (pinned: boolean) => void;
+  isSidebarOpen: boolean;
+  setIsSidebarOpen: (open: boolean) => void;
+  toggleSidebarPinned: () => void;
+  toggleSidebarOpen: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -264,6 +273,58 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [filterPackageId, setFilterPackageId] = useState<string | null>(null);
   const [filterTagId, setFilterTagId] = useState<string | null>(null);
 
+  // Sidebar Pin & Responsive Collapse State
+  const [isSidebarPinned, setIsSidebarPinnedState] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('app_sidebar_pinned');
+      if (saved !== null) {
+        return saved === 'true';
+      }
+      return typeof window !== 'undefined' ? window.innerWidth >= 1024 : true;
+    } catch {
+      return true;
+    }
+  });
+
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(() => {
+    try {
+      if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+        const saved = localStorage.getItem('app_sidebar_pinned');
+        return saved === 'true';
+      }
+      return true;
+    } catch {
+      return true;
+    }
+  });
+
+  const setIsSidebarPinned = useCallback((pinned: boolean) => {
+    setIsSidebarPinnedState(pinned);
+    try {
+      localStorage.setItem('app_sidebar_pinned', String(pinned));
+    } catch {}
+    if (pinned) {
+      setIsSidebarOpen(true);
+    }
+  }, []);
+
+  const toggleSidebarPinned = useCallback(() => {
+    setIsSidebarPinnedState((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('app_sidebar_pinned', String(next));
+      } catch {}
+      if (next) {
+        setIsSidebarOpen(true);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleSidebarOpen = useCallback(() => {
+    setIsSidebarOpen((prev) => !prev);
+  }, []);
+
   const isAdmin = Boolean(currentUser?.is_admin);
 
   const showToast = useCallback((msg: string) => {
@@ -385,6 +446,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setAiSettings,
         isAiChatOpen,
         setIsAiChatOpen,
+        isSidebarPinned,
+        setIsSidebarPinned,
+        isSidebarOpen,
+        setIsSidebarOpen,
+        toggleSidebarPinned,
+        toggleSidebarOpen,
       }}
     >
       {children}

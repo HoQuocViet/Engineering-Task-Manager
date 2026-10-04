@@ -2,7 +2,7 @@
 
 > **Document Type**: Comprehensive Architectural & Functional Specification (Vibe-Coding Ready)  
 > **Target LLMs / Code Engines**: Claude 3.7 Sonnet / Cursor / GitHub Copilot / Gemini  
-> **Version**: 1.1.0  
+> **Version**: 1.3.0  
 > **Target Platform**: Responsive Web Single-Page Application (SPA) / Local Hybrid Execution  
 > **Default Port**: 3000  
 > **Database Engine**: Local Persistent SQLite via WebAssembly (`sql.js`)  
@@ -19,8 +19,10 @@
 1. **100% Local Data Ownership & Zero Cloud DB Setup**: Operates instantly out-of-the-box using local SQLite (`sql.js`) persisted to a single binary file on disk (`data/app.db`). Includes one-click database export (`.sqlite`) and import/restore without requiring Docker, PostgreSQL, or remote cloud connections.
 2. **Vietnamese Diacritics & Unicode-Aware Search (`VI_MATCH`)**: Employs custom SQLite user-defined functions (`LOWER`, `VI_MATCH`) in WebAssembly to seamlessly match Vietnamese text both with and without diacritic accents (e.g., typing `an choi` accurately matches `Ăn chơi`), while preserving a 100% English UI.
 3. **Zero-Flick, Dense Engineering UI**: Professional desktop-density layout featuring instantaneous row selection without text shifting or layout jumping, inline progress adjustment sliders, keyboard navigation ($\uparrow$ / $\downarrow$ / `Enter`), sticky filter toolbars, and synchronized dark/light theme tokens.
-4. **Bidirectional Microsoft Outlook 365 Sync**: Integrates with Microsoft Graph REST API to synchronize task deadlines, review meetings, and milestones directly with user Outlook calendars.
-5. **Multi-Model Engineering AI Copilot & Resilient Tier Isolation**: Context-aware assistant powered by `@google/genai` (Gemini 3.8 Flash, Gemini 3.1 Flash Lite) and Anthropic Claude (Claude 3.7 Sonnet, 3.5 Sonnet/Haiku). Features strict isolation between free-tier text models and paid Pro models (`gemini-3.1-pro-preview`) to prevent 429 quota traps, backed by automatic exponential backoff (1200ms) and dynamic failover during temporary Google Cloud high demand spikes (HTTP 503).
+4. **Authoritative Task State Machine & Data Integrity**: Single source of truth for task lifecycle transitions (`normalizeTaskState`) eliminating status/progress divergence across all client modals, quick edit rows, bulk operations, and backend endpoints. Strict relational validation guarantees packages belong to their parent projects.
+5. **Atomic Transactions & Storage Consistency**: All multi-mutation operations (task creation, updates, linked group synchronization, comment additions, batch actions, file deletions) execute within atomic SQLite transactions with automatic rollback and single-flush disk persistence.
+6. **Bidirectional Microsoft Outlook 365 Sync**: Integrates with Microsoft Graph REST API to synchronize task deadlines, review meetings, and milestones directly with user Outlook calendars.
+7. **Multi-Model Engineering AI Copilot & Resilient Tier Isolation**: Context-aware assistant powered by `@google/genai` (Gemini 3.8 Flash, Gemini 3.1 Flash Lite) and Anthropic Claude (Claude 3.7 Sonnet, 3.5 Sonnet/Haiku). Features transparent active model identification, dynamic fallback badge indicators on temporary Google Cloud demand spikes (HTTP 503), and clickable task shortcut tokens.
 
 ---
 
@@ -44,11 +46,12 @@
 
 ### 2.2 Backend Architecture
 - **Runtime Environment**: Node.js $\ge$ 18 with `tsx` (Dev) and `esbuild` bundled CJS (Production)
-- **Web Server**: Express 4.21 with Express JSON/URL-encoded middleware
+- **Web Server**: Express 4.21 with Express JSON/URL-encoded middleware and authentication middleware
 - **Vite Integration**: In development, `vite.middlewares` is mounted directly onto the Express server inside `server.ts` on port 3000. In production, static assets from `dist/` are served.
 - **Database Engine**: `sql.js` (WebAssembly SQLite compiled for Node.js)
   - Persisted binary file: `data/app.db`
   - Custom C/WASM registered functions: `VI_MATCH(content, keyword)`, `LOWER(str)`
+  - Transaction manager: `withTransaction()` providing atomic commit, rollback, and single disk flush
 - **File Uploads**: `multer` with disk storage in `data/uploads/`
 - **AI SDK**: `@google/genai` for official Google Gemini integration
 
@@ -70,19 +73,21 @@
 │   └── uploads/                # Physical uploaded attachments (Drawings, PDFs, Specs)
 │
 ├── server/                     # Backend API & Database Logic
-│   ├── db.ts                   # SQLite wasm wrapper, schema definitions, custom functions, persistence
+│   ├── db.ts                   # SQLite wasm wrapper, schema, transactions, custom functions, persistence
 │   ├── seed.ts                 # Engineering demo seed dataset (Projects, Packages, Tasks, Users)
+│   ├── middleware/             # Express middlewares
+│   │   └── auth.ts             # User session identification and admin guard middleware
 │   └── routes/                 # REST API controllers
-│       ├── tasks.ts            # Task CRUD, batch actions, activities, comments, subtasks
+│       ├── tasks.ts            # Task CRUD, batch actions, activities, comments, group sync
 │       ├── projects.ts         # Project creation, status, and metadata
 │       ├── packages.ts         # Procurement package and deliverable management
 │       ├── categories.ts       # Discipline & task category endpoints
 │       ├── tags.ts             # Tagging endpoints and color management
 │       ├── users.ts            # Team member management and discipline assignment
 │       ├── dashboard.ts        # Aggregated KPI metrics, overdue statistics, workload data
-│       ├── attachments.ts      # Multi-part file upload, metadata storage, download stream
+│       ├── attachments.ts      # Multi-part file upload, metadata storage, download, orphan cleanup
 │       ├── system.ts           # SQLite export/download, import/restore, and reset logic
-│       ├── ai.ts               # Gemini & Claude prompt routing, streaming, and technical chat
+│       ├── ai.ts               # Gemini & Claude prompt routing, resilient fallback, and technical chat
 │       └── outlook.ts          # Microsoft Graph OAuth tokens, event sync, and calendar webhooks
 │
 ├── src/                        # Frontend React Application
@@ -98,10 +103,11 @@
 │   │
 │   ├── lib/                    # Reusable Business & UI Utilities
 │   │   ├── api.ts              # Centralized HTTP client wrapper with error handling
+│   │   ├── taskStateMachine.ts # Authoritative Task State Machine & Normalization Engine
 │   │   ├── dateUtils.ts        # Due date calculations, overdue checks, formatting
 │   │   ├── excelExport.ts      # Multi-sheet Excel workbook generator (`.xlsx`)
 │   │   ├── printUtils.ts       # Clean printable report generator with custom print CSS
-│   │   └── sortUtils.ts        # Multi-column sorting and filtering engine
+│   │   └── sortUtils.ts        # Multi-column sorting and filtering engine (created_at DESC default)
 │   │
 │   ├── components/             # Modular UI Components
 │   │   ├── layout/
@@ -236,6 +242,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   start_date TEXT,
   deadline TEXT,
   forecast_finish TEXT,
+  forecast_revision_count INTEGER DEFAULT 0, -- Counter incremented strictly on revisions (#1, #2...)
   completed_date TEXT,
   assignee_id TEXT,
   pics TEXT,                      -- JSON array string of PIC names e.g. '["Ho Quoc Viet", "Nguyen Van An"]'
@@ -353,6 +360,67 @@ Registered via `database.create_function(...)` in `server/db.ts`:
   - Compares string with both Unicode lowercasing and NFD diacritics stripping (`normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd')`).
   - Ensures Vietnamese technical notes or descriptions match seamlessly when users search without accents.
 
+### 4.3 Authoritative Task State Machine & Normalization Engine (`src/lib/taskStateMachine.ts`)
+
+To prevent inconsistent task states across multiple client views and backend endpoints, the system enforces a single authoritative normalization engine (`normalizeTaskState`):
+
+```text
+       ┌──────────┐
+       │   TODO   │  (Progress strictly = 0%, completed_date = null)
+       └────┬─────┘
+            │  ▲
+ progress   │  │  progress = 0%
+ 1..99%     ▼  │  or status = TODO
+       ┌──────────┐
+       │IN PROGRESS│  (Progress strictly 1..99%, completed_date = null)
+       └────┬─────┘
+            │  ▲
+ status=DONE│  │  status = IN PROGRESS / WAITING / TODO
+ progress   │  │  or progress < 100%
+ 100%       ▼  │
+       ┌──────────┐
+       │   DONE   │  (Progress strictly = 100%, completed_date != null)
+       └──────────┘
+```
+
+#### Core Normalization Rules:
+1. **DONE**: Progress is strictly forced to `100%`. `completed_date` must be present (defaults to current date `YYYY-MM-DD`).
+2. **TODO**: Progress is strictly forced to `0%`. `completed_date` is strictly `null`.
+3. **IN PROGRESS**: Progress must be between `1%` and `99%` (defaults to `50%` if transitioning from `0%` or `100%`). `completed_date` is strictly `null`.
+4. **WAITING / ON HOLD**: Progress must be between `0%` and `99%`. It can never be `100%` (capped to `50%` if transitioned from `DONE`). `completed_date` is strictly `null`.
+5. **CANCELLED**: Progress is preserved if $\le 99\%$ (or capped), `completed_date` is strictly `null`.
+
+#### Cross-Synchronization Cases:
+- **Case A**: Setting progress from `0%` to `50%` while status is `TODO` $\rightarrow$ Status automatically transitions to `IN PROGRESS / 50%` (`completed_date: null`).
+- **Case B**: Setting status to `DONE` while progress is `50%` $\rightarrow$ Progress automatically transitions to `100%` and `completed_date` is stamped with today's date.
+- **Case C**: Setting status from `DONE` to `WAITING` $\rightarrow$ Progress is capped below `100%` (defaults to `50%`) and `completed_date` is cleared to `null`.
+- **Case D**: Setting status from `DONE` to `TODO` $\rightarrow$ Progress is reset to `0%` and `completed_date` is cleared to `null`.
+- **Case E**: Setting progress slider directly to `100%` $\rightarrow$ Status automatically transitions to `DONE` and `completed_date` is stamped with today's date.
+
+### 4.4 Data Integrity, Transactions & Forecasting Architecture
+
+1. **Project & Package Relational Integrity**:
+   - A task cannot belong to Project A while its assigned procurement package belongs to Project B.
+   - During `POST /api/tasks` and `PUT /api/tasks/:id`, if both `project_id` and `package_id` are provided, the backend queries `packages.project_id` and rejects mismatches with `HTTP 400 Integrity Error`.
+   - Supplying a non-existent `package_id` immediately fails with `HTTP 400`.
+2. **Authoritative Forecast Revision Tracking**:
+   - **Initial Forecast**: When `forecast_finish` transitions from `null` to a date, `forecast_revision_count` remains `0` (logged as `Initial forecast set`).
+   - **Revisions (#1, #2...)**: When an existing forecast date changes to a different date, `forecast_revision_count` increments by `1` (logged as `Forecast revised to <date> (Revision #N)`).
+   - **Duplicate Date Save**: Saving identical date values does not trigger revision increments or ghost activity entries.
+3. **Atomic Transactions (`withTransaction`)**:
+   - Multi-step database operations (batch updates, task creation with tags, linked group synchronization, comment additions, and system imports) execute inside `withTransaction()`.
+   - Executes `BEGIN TRANSACTION` $\rightarrow$ statements $\rightarrow$ `COMMIT`. If any step throws an error, `ROLLBACK` executes automatically and no partial records remain in SQLite.
+   - Binary disk write (`saveDb()`) flushes to disk exactly once upon successful transaction commit.
+4. **Safe Task & Attachment Lifecycle**:
+   - When deleting a task (`DELETE /api/tasks/:id` or bulk delete), physical attachment file paths are queried first.
+   - Database records are deleted within an atomic transaction.
+   - Physical disk files in `data/uploads/` are unlinked only after database transaction commit succeeds, preventing orphan disk files and preserving files in case of rollback.
+   - Includes maintenance endpoint `POST /api/attachments/cleanup-orphans` to purge any unindexed files from the disk directory.
+5. **Linked Group Inheritance Logic (Multi-Package Tasks)**:
+   - **Shared Fields**: Synchronized across all siblings in group: `title`, `description`, `type`, `category_id`, `priority`, `pics`, `tags`.
+   - **Independent Fields**: Retain deliverable-specific autonomy: `status`, `progress`, `deadline`, `forecast_finish`, `completed_date`, `assignee_id`.
+   - **Package Addition**: When adding a new package to an existing linked group, the new deliverable strictly inherits all shared fields, begins at status `TODO / 0%`, and starts with clean independent milestone dates.
+
 ---
 
 ## 5. User Interface & Screen Architecture
@@ -469,23 +537,37 @@ All major views must feature a consistent 62px-height top banner adhering to the
 All endpoints are hosted under the `/api` prefix.
 
 ### 6.1 Tasks & Work Deliverables
-- `GET /api/tasks`: Query parameters: `search`, `status`, `priority`, `projectId`, `packageId`, `categoryId`, `assigneeId`, `pic`, `overdue`. Returns array of enriched tasks with tags, subtasks count, and assignee info, sorted strictly by `created_at DESC`.
-- `POST /api/tasks`: Create task. Payload: `{ title, description, projectId, packageId, categoryId, assigneeId, priority, status, deadline, startDate }`. Automatically logs creation in `task_activities`.
-- `GET /api/tasks/:id`: Returns complete task object including subtasks, file attachments, comment thread, and chronological audit history.
-- `PATCH /api/tasks/:id`: Partial update of task attributes (`status`, `progress`, `priority`, `deadline`, etc.). Emits activity log for modified fields.
-- `DELETE /api/tasks/:id`: Deletes task and cascades to subtasks, attachments, and comments.
-- `POST /api/tasks/batch`: Payload: `{ taskIds: string[], action: 'status' | 'priority' | 'assignee' | 'delete', value?: any }`. Executes bulk mutation within a single SQLite transaction.
+- `GET /api/tasks`: Query parameters: `search`, `status`, `priority`, `projectId`, `packageId`, `categoryId`, `assigneeId`, `pic`, `deadlineFilter`, `forecastFilter`, `progress`, `sort`. Returns array of enriched tasks with tags, subtasks count, and assignee info, sorted strictly by `created_at DESC` by default.
+- `POST /api/tasks`: Create task. Payload: `{ title, description, projectId, packageId, categoryId, assigneeId, priority, status, progress, deadline, forecast_finish, startDate, pics, tags, applicablePackages, applicableProjects }`.
+  - Enforces `normalizeTaskState` on input status/progress.
+  - Validates relational integrity: ensures package belongs to specified project (HTTP 400 on mismatch or invalid package).
+  - Supports multi-package linked group batch creation inside an atomic transaction.
+  - Automatically logs creation in `task_activities`.
+- `GET /api/tasks/:id`: Returns complete task object including linked tasks in group, subtasks, file attachments, comment thread, and chronological audit history.
+- `PUT /api/tasks/:id` & `PATCH /api/tasks/:id`: Authoritative update of task attributes.
+  - Enforces authoritative state machine transitions (`normalizeTaskState`).
+  - Validates package-project consistency (HTTP 400 on mismatch).
+  - Enforces forecast revision tracking (initial forecast vs revision #1, #2...; no revision increment on identical date save).
+  - Group synchronization: When `syncGroup: true`, synchronizes shared fields (`title`, `description`, `type`, `category_id`, `priority`, `pics`, `tags`) to all sibling tasks in group, preserving independent status/dates.
+  - Linked package membership: Automatically spawns inherited deliverables for newly checked packages in group, and unlinks/deletes deselected packages.
+  - Logs structured activity records in `task_activities`.
+- `DELETE /api/tasks/:id`: Deletes task and cascades to subtasks, attachments, and comments inside an atomic transaction. Safely removes physical attachment files only after transaction commit.
+- `POST /api/tasks/bulk`: Payload: `{ taskIds: string[], action: 'MARK_DONE' | 'SET_STATUS' | 'SET_PRIORITY' | 'DELETE', value?: any, userId?: string }`. Executes bulk mutations within an atomic transaction using the authoritative task state machine and logs corresponding activities.
+- `POST /api/tasks/:id/unlink-group`: Unlinks deliverable from its linked group (`group_id = NULL`).
 
 ### 6.2 Subtasks, Comments & Activities
 - `POST /api/tasks/:id/subtasks`: Add subtask item.
 - `PATCH /api/tasks/:id/subtasks/:subtaskId`: Toggle completion (`is_done: 0 | 1`) or rename.
 - `DELETE /api/tasks/:id/subtasks/:subtaskId`: Remove subtask.
-- `POST /api/tasks/:id/comments`: Add comment. Payload: `{ userId, content }`.
+- `POST /api/tasks/:id/comments`: Add comment. Payload: `{ userId, content }`. Logs activity and updates task `updated_at`.
+- `PUT /api/tasks/:id/comments/:commentId`: Update comment content.
+- `DELETE /api/tasks/:id/comments/:commentId`: Delete comment.
 
 ### 6.3 Attachments
 - `POST /api/attachments/upload`: `multipart/form-data` file upload with `taskId` and `userId`. Stores file in `data/uploads/` and inserts record into `task_attachments`.
 - `GET /api/attachments/:id/download`: Streams physical attachment file with original filename in `Content-Disposition`.
-- `DELETE /api/attachments/:id`: Deletes physical file from disk and removes database row.
+- `DELETE /api/attachments/:id`: Deletes database row inside an atomic transaction, then removes physical file from disk.
+- `POST /api/attachments/cleanup-orphans`: Scans `data/uploads/` and purges any orphan files not indexed in `task_attachments`.
 
 ### 6.4 Projects, Packages & Categories
 - `GET /api/projects` / `POST /api/projects` / `PATCH /api/projects/:id` / `DELETE /api/projects/:id`
@@ -503,7 +585,8 @@ All endpoints are hosted under the `/api` prefix.
 - `GET /api/system/stats`: Returns database file size, total records per table, and server uptime.
 - `GET /api/system/download-db`: Downloads raw `data/app.db` binary as an attachment named `engineering_tasks_backup_<timestamp>.sqlite`.
 - `POST /api/system/import-db`: Accepts uploaded `.sqlite` or `.db` file, instantiates new `sql.js` Database, validates schema, replaces `data/app.db`, and re-registers custom functions.
-- `POST /api/system/reset-db`: Drops/truncates tables and executes `server/seed.ts`.
+- `POST /api/system/reset-db`: Drops/truncates tables and executes `server/seed.ts` within transaction.
+- `POST /api/system/import-json`: Imports JSON backup inside an atomic transaction with admin authorization.
 
 ### 6.7 AI & Calendar Integrations
 - `GET /api/ai/models`: Query parameter: `provider=gemini|claude`. Returns catalog of available models, descriptions, and recommended flags.
@@ -511,10 +594,12 @@ All endpoints are hosted under the `/api` prefix.
   - *Payload*: `{ customApiKey?, provider: 'gemini' | 'claude', model?: string }`.
   - *Gemini Resilience Logic (`getCandidateGeminiModels`)*: Automatically filters out paid Pro models for free-tier users to prevent `429 Quota Exceeded (limit: 0)` errors. Executes exponential backoff (1200ms) on temporary Google Cloud demand spikes (`HTTP 503 UNAVAILABLE`) and seamlessly tests fallback models (`gemini-3.1-flash-lite`, `gemini-flash-latest`).
   - *Response*: `{ success: boolean, provider, verifiedModel, availableModels, message }`.
-- `POST /api/ai/chat`: Streaming & multi-turn technical query assistant.
+- `POST /api/ai/chat`: Multi-turn technical query assistant.
   - *Payload*: `{ message: string, history: Array<{role, content}>, customApiKey?, provider?, model?, customInstructions? }`.
   - Injects live workspace context (projects, packages, categorized deliverables, overdue alerts).
-  - Employs automated free-tier failover if the primary model encounters temporary `503` demand spikes.
+  - Employs automated resilient failover within provider tier if the primary model encounters temporary `503` demand spikes.
+  - *Response*: `{ reply: string, modelUsed: string, isFallback: boolean, provider: string, timestamp: string }`.
+- `POST /api/ai/reword-description`: Refines raw engineering draft notes into concise technical descriptions adhering to EPC standards.
 - `GET /api/outlook/status`: Returns current Microsoft Graph connection status and user email.
 - `POST /api/outlook/sync`: Initiates calendar event fetch and syncs due dates with Outlook 365.
 
@@ -597,6 +682,41 @@ npm start
    - Hỗ trợ **click trực tiếp lên hình tròn avatar** để mở hộp thoại tải ảnh/thay đổi ảnh đại diện (bỏ nút nhấn riêng).
    - Cho phép click trực tiếp lên avatar của từng thành viên ngay trong danh sách bên phải để cập nhật ảnh tức thì.
    - Trả tab **Work Categories** về trạng thái nguyên bản tập trung chuyên sâu cho danh mục công việc kỹ thuật.
+7. **Authoritative Task State Machine & Normalization Engine (`src/lib/taskStateMachine.ts`)**:
+   - Thống nhất duy nhất một nguồn chân lý (Single Source of Truth) cho trạng thái và tiến độ công việc giữa Backend và Frontend (`normalizeTaskState`).
+   - Xử lý hoàn toàn triệt để các tình huống chuyển đổi trạng thái:
+     - Case A: `TODO / 0%` kéo lên 50% $\rightarrow$ chuyển thành `IN PROGRESS / 50%` (`completed_date: null`).
+     - Case B: `IN PROGRESS / 50%` chọn `DONE` $\rightarrow$ chuyển thành `DONE / 100%` (`completed_date: today`).
+     - Case C: `DONE / 100%` chọn `WAITING` $\rightarrow$ chuyển thành `WAITING / 50%` (capped < 100%, `completed_date: null`).
+     - Case D: `DONE / 100%` chọn `TODO` $\rightarrow$ chuyển thành `TODO / 0%` (`completed_date: null`).
+     - Case E: Kéo slider trực tiếp lên 100% $\rightarrow$ chuyển thành `DONE / 100%` (`completed_date: today`).
+   - Đồng bộ hóa logic trên tất cả các thao tác: POST tạo mới, PUT cập nhật chi tiết, Bulk cập nhật hàng loạt, và Quick inline updates trên bảng danh sách.
+8. **Database Integrity & Cross-Project Package Verification**:
+   - Kiểm tra quan hệ toàn vẹn giữa `tasks.project_id` và `packages.project_id`: từ chối với HTTP 400 nếu package thuộc Dự án A nhưng task được gán Dự án B.
+   - Từ chối với HTTP 400 nếu mã package gửi lên không tồn tại trong cơ sở dữ liệu.
+9. **Authoritative Forecast Revision Tracking**:
+   - Phân biệt rõ ràng ngày dự báo ban đầu (`Initial Forecast`, revision count = 0) và các lần điều chỉnh sau đó (`Revision #1`, `Revision #2`...).
+   - Lưu lại cùng một ngày dự báo không làm tăng số đếm revision và không ghi log thừa.
+10. **Atomic Transactions & Storage Safety**:
+    - Tích hợp helper `withTransaction()` trong `server/db.ts` quản lý `BEGIN TRANSACTION`, `COMMIT`, `ROLLBACK`.
+    - Ghi cơ sở dữ liệu xuống đĩa SQLite đúng một lần duy nhất khi commit thành công, loại bỏ tình trạng ghi đĩa liên tục gây nghẽn I/O.
+    - Quy trình xóa task và file đính kèm an toàn: truy vấn file $\rightarrow$ xóa bản ghi database trong transaction $\rightarrow$ chỉ xóa file vật lý sau khi commit thành công. Bổ sung endpoint quét và dọn dẹp file mồ côi (`POST /api/attachments/cleanup-orphans`).
+11. **Multi-Package & Linked Group Inheritance Logic**:
+    - Phân tách rõ ràng giữa trường dùng chung (Shared fields: title, description, type, category, priority, PIC, tags) và trường độc lập (Independent fields: status, progress, deadline, forecast, completed_date, assignee).
+    - Đồng bộ tự động các trường dùng chung khi cờ `syncGroup` bật, đồng thời giữ nguyên tính tự chủ của tiến độ và thời hạn từng gói thầu.
+12. **AI Assistant Architecture Redesign & Fallback Indicators**:
+    - Tối ưu context injection với dữ liệu tóm tắt KPI và danh sách công việc liên quan.
+    - Tự động phát hiện và hiển thị huy hiệu model thực tế sử dụng (`modelUsed`) cùng cảnh báo kích hoạt model dự phòng khi Google Cloud gặp tải cao đột xuất (HTTP 503).
+    - Cung cấp thẻ công việc tương tác clickable (`[TASK:id|title]`) giúp kỹ sư mở nhanh chi tiết công việc chỉ bằng một cú nhấp chuột.
+13. **Comprehensive Automated Regression Test Suite (`tests/regression_tests.ts`)**:
+    - Mở rộng bộ kiểm thử tự động lên **7/7 test suites** toàn diện (pass 100% qua lệnh `npm test`):
+      1. Default Task Ordering (`created_at DESC` ổn định khi chỉnh sửa).
+      2. PIC Normalization & Deduplication.
+      3. Live API PIC Filtering & Server Endpoints.
+      4. Task State Machine Transitions (Cases A, B, C, D, E).
+      5. Forecast Revision Logic & Non-increment on same date.
+      6. Database Integrity & Cross-Project Package Rejection (HTTP 400).
+      7. Atomic Transaction Management & Automatic Rollback.
 
 ### 9.2 In Progress & Verification (Đang hoàn thiện & Theo dõi)
 1. **Modal Form PIC Consistency**:

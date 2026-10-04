@@ -257,7 +257,7 @@ export const ProfileSettingsTab: React.FC = () => {
                 type="text"
                 value={discipline}
                 onChange={(e) => setDiscipline(e.target.value)}
-                placeholder="e.g. Piping, Process, Structural"
+                placeholder="e.g. Instrument, Piping, Process, Structural"
                 className="w-full text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg px-3 py-2 outline-none focus:border-blue-500"
               />
             </div>

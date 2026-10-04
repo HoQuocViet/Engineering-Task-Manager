@@ -72,7 +72,7 @@ export const ProjectsView: React.FC = () => {
   const [isAddPackageModalOpen, setIsAddPackageModalOpen] = useState(false);
   const [newPkgCode, setNewPkgCode] = useState('');
   const [newPkgName, setNewPkgName] = useState('');
-  const [newPkgDiscipline, setNewPkgDiscipline] = useState('Mechanical');
+  const [newPkgDiscipline, setNewPkgDiscipline] = useState('Instrument');
   const [newPkgVendor, setNewPkgVendor] = useState('');
   const [newPkgDesc, setNewPkgDesc] = useState('');
   const [selectedAssignPackageId, setSelectedAssignPackageId] = useState('');
@@ -1300,11 +1300,11 @@ export const ProjectsView: React.FC = () => {
                     onChange={(e) => setNewPkgDiscipline(e.target.value)}
                     className="w-full border border-slate-300 dark:border-slate-700 rounded px-2.5 py-1.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 outline-none cursor-pointer"
                   >
-                    <option value="Mechanical">Mechanical</option>
+                    <option value="Instrument">Instrument</option>
                     <option value="Process">Process</option>
-                    <option value="Electrical">Electrical</option>
-                    <option value="Instrumentation">Instrumentation</option>
                     <option value="Piping">Piping</option>
+                    <option value="Mechanical">Mechanical</option>
+                    <option value="Electrical">Electrical</option>
                     <option value="Civil & Structural">Civil & Structural</option>
                   </select>
                 </div>

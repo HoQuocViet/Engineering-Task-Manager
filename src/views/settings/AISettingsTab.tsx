@@ -311,85 +311,7 @@ export const AISettingsTab: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* 1. Primary Provider Selection */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-2xs space-y-4 transition-colors">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
-          <div>
-            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-              <Bot className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-              <span>Active Workspace AI Engine</span>
-            </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Select which AI provider is actively used when querying the floating AI Assistant.
-            </p>
-          </div>
-          <span className="text-[11px] font-mono font-semibold px-2.5 py-1 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 self-start sm:self-auto">
-            Active: <span className="font-bold uppercase">{activeProvider}</span>
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
-          {/* Gemini Switcher Button */}
-          <button
-            type="button"
-            onClick={() => {
-              setActiveProvider('gemini');
-              showToast('Set default AI Provider to Google Gemini.');
-            }}
-            className={`p-4 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
-              activeProvider === 'gemini'
-                ? 'border-blue-600 bg-blue-50/50 dark:bg-blue-950/40 text-blue-900 dark:text-blue-200 ring-2 ring-blue-500/20'
-                : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/60 text-slate-700 dark:text-slate-300'
-            }`}
-          >
-            <div className="flex items-center space-x-3">
-              <div className="w-9 h-9 rounded-lg bg-blue-600 text-white flex items-center justify-center text-sm font-bold shrink-0 shadow-2xs">
-                G
-              </div>
-              <div>
-                <div className="font-bold text-xs text-slate-900 dark:text-slate-100">Google Gemini</div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400">Gemini 3.8 Flash & Pro</div>
-              </div>
-            </div>
-            {activeProvider === 'gemini' && <CheckCircle2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />}
-          </button>
-
-          {/* Claude Switcher Button */}
-          <button
-            type="button"
-            onClick={() => {
-              setActiveProvider('claude');
-              showToast('Set default AI Provider to Anthropic Claude.');
-            }}
-            className={`p-4 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
-              activeProvider === 'claude'
-                ? 'border-amber-600 bg-amber-50/50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 ring-2 ring-amber-500/20'
-                : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/60 text-slate-700 dark:text-slate-300'
-            }`}
-          >
-            <div className="flex items-center space-x-3">
-              <div className="w-9 h-9 rounded-lg bg-amber-600 text-white flex items-center justify-center text-sm font-bold shrink-0 shadow-2xs">
-                C
-              </div>
-              <div>
-                <div className="font-bold text-xs text-slate-900 dark:text-slate-100">Anthropic Claude</div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400">Claude 3.7 Sonnet / Haiku / Opus</div>
-              </div>
-            </div>
-            {activeProvider === 'claude' && <CheckCircle2 className="w-5 h-5 text-amber-600 dark:text-amber-400" />}
-          </button>
-        </div>
-
-        {/* Dual Keys Clarification Info Banner */}
-        <div className="p-3.5 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-start space-x-2.5 text-xs text-slate-600 dark:text-slate-300">
-          <HelpCircle className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
-          <p className="text-[11px] leading-relaxed">
-            <strong className="text-slate-900 dark:text-slate-100 font-semibold">How Dual API Keys Work:</strong> You can enter and test both Google Gemini and Anthropic Claude API keys simultaneously below. The <strong>Active Engine</strong> selected above (or switched dynamically inside the AI Chat window header) determines which AI model processes your chat requests.
-          </p>
-        </div>
-      </div>
-
-      {/* 2. Independent API Key & Model Configuration Cards */}
+      {/* API Key & Model Configuration Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* GOOGLE GEMINI CARD */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-2xs space-y-5 flex flex-col justify-between transition-colors">
@@ -405,13 +327,17 @@ export const AISettingsTab: React.FC = () => {
                 </div>
               </div>
               <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                geminiStatus === 'connected'
+                geminiStatus === 'connected' || Boolean(geminiApiKey && geminiStatus !== 'error')
                   ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
                   : geminiStatus === 'error'
                   ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
               }`}>
-                {geminiStatus === 'connected' ? 'Connected' : geminiStatus === 'error' ? 'Error' : 'Untested'}
+                {geminiStatus === 'connected' || Boolean(geminiApiKey && geminiStatus !== 'error')
+                  ? 'Activated'
+                  : geminiStatus === 'error'
+                  ? 'Error'
+                  : 'Not Configured'}
               </span>
             </div>
 
@@ -517,13 +443,17 @@ export const AISettingsTab: React.FC = () => {
                 </div>
               </div>
               <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                claudeStatus === 'connected'
+                claudeStatus === 'connected' || Boolean(claudeApiKey && claudeStatus !== 'error')
                   ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
                   : claudeStatus === 'error'
                   ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
               }`}>
-                {claudeStatus === 'connected' ? 'Connected' : claudeStatus === 'error' ? 'Error' : 'Untested'}
+                {claudeStatus === 'connected' || Boolean(claudeApiKey && claudeStatus !== 'error')
+                  ? 'Activated'
+                  : claudeStatus === 'error'
+                  ? 'Error'
+                  : 'Not Configured'}
               </span>
             </div>
 

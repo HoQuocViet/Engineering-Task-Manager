@@ -46,11 +46,34 @@ router.get('/', (req: Request, res: Response) => {
     let whereClauses: string[] = ['1=1'];
     let params: any[] = [];
 
-    // Search filter (title, description) - supports Unicode case-folding & Vietnamese diacritics
+    // Universal Search filter: searches across all fields and joined entities (Task Name, Scope Notes, Status, Priority, PIC, Package, Project, Category, Group, Deadline, Interface Discipline)
     if (search && typeof search === 'string' && search.trim().length > 0) {
-      whereClauses.push('(VI_MATCH(t.title, ?) = 1 OR VI_MATCH(t.description, ?) = 1)');
       const term = search.trim();
-      params.push(term, term);
+      const likeTerm = `%${term}%`;
+      whereClauses.push(`(
+        VI_MATCH(t.title, ?) = 1 
+        OR VI_MATCH(t.description, ?) = 1
+        OR VI_MATCH(t.status, ?) = 1
+        OR VI_MATCH(t.priority, ?) = 1
+        OR VI_MATCH(COALESCE(t.pics, ''), ?) = 1
+        OR VI_MATCH(COALESCE(u.name, ''), ?) = 1
+        OR VI_MATCH(COALESCE(pr.name, ''), ?) = 1
+        OR VI_MATCH(COALESCE(pr.code, ''), ?) = 1
+        OR VI_MATCH(COALESCE(p.name, ''), ?) = 1
+        OR VI_MATCH(COALESCE(p.code, ''), ?) = 1
+        OR VI_MATCH(COALESCE(c.name, ''), ?) = 1
+        OR VI_MATCH(COALESCE(t.group_id, ''), ?) = 1
+        OR t.deadline LIKE ?
+        OR t.forecast_finish LIKE ?
+        OR EXISTS (
+          SELECT 1 FROM task_interfaces itf 
+          WHERE itf.task_id = t.id AND (VI_MATCH(itf.discipline, ?) = 1 OR VI_MATCH(itf.action, ?) = 1)
+        )
+      )`);
+      params.push(
+        term, term, term, term, term, term, term, term, term, term, term, term,
+        likeTerm, likeTerm, term, term
+      );
     }
 
     // Status filter
@@ -108,8 +131,8 @@ router.get('/', (req: Request, res: Response) => {
       if (rawPic === 'UNASSIGNED') {
         whereClauses.push("(t.pics IS NULL OR t.pics = '' OR t.pics = '[]' OR t.pics = 'null' OR TRIM(t.pics) = '' OR TRIM(t.pics) = '[\"\"]') AND (t.assignee_id IS NULL OR t.assignee_id = '')");
       } else {
-        const cleanPic = rawPic.replace(/\s*\(Tôi\)\s*$/, '').trim();
-        const isSelf = rawPic.includes('Tôi') || cleanPic.toLowerCase() === 'ho quoc viet';
+        const cleanPic = rawPic.replace(/\s*\((?:Tôi|Me)\)\s*$/i, '').trim();
+        const isSelf = rawPic.includes('Tôi') || rawPic.includes('Me') || cleanPic.toLowerCase() === 'ho quoc viet';
         if (isSelf) {
           whereClauses.push(`(
             (json_valid(t.pics) = 1 AND EXISTS (
@@ -155,6 +178,16 @@ router.get('/', (req: Request, res: Response) => {
           );
         }
       }
+    }
+
+    // Interface filter
+    const rawInterface = (req.query.interface as string) || (req.query.interfaceDiscipline as string) || '';
+    if (rawInterface && rawInterface !== 'ALL') {
+      whereClauses.push(`EXISTS (
+        SELECT 1 FROM task_interfaces itf 
+        WHERE itf.task_id = t.id AND (itf.discipline = ? OR VI_MATCH(itf.discipline, ?) = 1)
+      )`);
+      params.push(rawInterface, rawInterface);
     }
 
     // Tag filter
@@ -306,6 +339,18 @@ router.get('/', (req: Request, res: Response) => {
       orderBy = "CASE WHEN t.pics IS NULL OR t.pics = '' OR t.pics = '[]' THEN 1 ELSE 0 END ASC, t.pics ASC, t.created_at DESC";
     } else if (sort === 'pic_desc') {
       orderBy = "CASE WHEN t.pics IS NULL OR t.pics = '' OR t.pics = '[]' THEN 1 ELSE 0 END ASC, t.pics DESC, t.created_at DESC";
+    } else if (sort === 'interface' || sort === 'interface_asc') {
+      orderBy = `(
+        SELECT COALESCE(MIN(itf.discipline), 'ZZZ')
+        FROM task_interfaces itf
+        WHERE itf.task_id = t.id
+      ) ASC, t.created_at DESC`;
+    } else if (sort === 'interface_desc') {
+      orderBy = `(
+        SELECT COALESCE(MAX(itf.discipline), '')
+        FROM task_interfaces itf
+        WHERE itf.task_id = t.id
+      ) DESC, t.created_at DESC`;
     }
 
     const whereSql = whereClauses.join(' AND ');
@@ -315,6 +360,9 @@ router.get('/', (req: Request, res: Response) => {
       SELECT COUNT(*) as total 
       FROM tasks t 
       LEFT JOIN packages p ON t.package_id = p.id
+      LEFT JOIN projects pr ON COALESCE(t.project_id, p.project_id) = pr.id
+      LEFT JOIN categories c ON t.category_id = c.id
+      LEFT JOIN users u ON t.assignee_id = u.id
       WHERE ${whereSql}
     `;
     const totalCountRes = query<{ total: number }>(countSql, params);
@@ -368,6 +416,32 @@ router.get('/', (req: Request, res: Response) => {
 
       for (const t of tasks) {
         t.tags = tagsByTaskId.get(t.id) || [];
+      }
+
+      // Fetch multidisciplinary interfaces for these tasks
+      const interfacesSql = `
+        SELECT task_id, id, discipline, status, priority, due_date, next_follow_up, action, external_pic
+        FROM task_interfaces
+        WHERE task_id IN (${placeholders})
+        ORDER BY 
+          CASE 
+            WHEN status = 'WAITING' THEN 1
+            WHEN status = 'OPEN' THEN 2
+            WHEN status = 'RECEIVED' THEN 3
+            WHEN status = 'CLOSED' THEN 4
+            ELSE 5
+          END,
+          due_date ASC
+      `;
+      const allInterfaces = query(interfacesSql, tasks.map((t: any) => t.id));
+      const interfacesByTaskId = new Map<string, any[]>();
+      for (const itf of allInterfaces) {
+        if (!interfacesByTaskId.has(itf.task_id)) interfacesByTaskId.set(itf.task_id, []);
+        interfacesByTaskId.get(itf.task_id)!.push(itf);
+      }
+
+      for (const t of tasks) {
+        t.interfaces = interfacesByTaskId.get(t.id) || [];
       }
     }
 
@@ -497,9 +571,101 @@ router.get('/:id', (req: Request, res: Response) => {
       task.pics = [];
     }
 
+    // Get related engineering bulletins / resources
+    const relatedBulletins = query(`
+      SELECT 
+        b.*,
+        pr.name as project_name, pr.code as project_code,
+        pk.name as package_name, pk.code as package_code,
+        rep.display_name as replacement_resource_name
+      FROM task_bulletins tb
+      JOIN bulletin_resources b ON tb.bulletin_id = b.id
+      LEFT JOIN projects pr ON b.project_id = pr.id
+      LEFT JOIN packages pk ON b.package_id = pk.id
+      LEFT JOIN bulletin_resources rep ON b.replacement_resource_id = rep.id
+      WHERE tb.task_id = ?
+      ORDER BY b.pinned DESC, b.open_count DESC, b.display_name ASC
+    `, [id]);
+    task.related_bulletins = relatedBulletins.map((b: any) => {
+      let tags: string[] = [];
+      if (b.tags) {
+        try { tags = JSON.parse(b.tags); } catch { tags = []; }
+      }
+      return {
+        ...b,
+        pinned: Boolean(b.pinned),
+        tags,
+      };
+    });
+
+    // Get related multidisciplinary interfaces
+    const interfaces = query(`
+      SELECT *
+      FROM task_interfaces
+      WHERE task_id = ?
+      ORDER BY 
+        CASE 
+          WHEN status = 'WAITING' THEN 1
+          WHEN status = 'OPEN' THEN 2
+          WHEN status = 'RECEIVED' THEN 3
+          WHEN status = 'CLOSED' THEN 4
+          ELSE 5
+        END,
+        due_date ASC,
+        created_at DESC
+    `, [id]);
+    task.interfaces = interfaces;
+
     res.json(task);
   } catch (err: any) {
     console.error('Error getting task details:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Link a bulletin resource to task
+router.post('/:id/bulletins', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { bulletinId, bulletin_id } = req.body;
+    const targetBulletinId = bulletinId || bulletin_id;
+
+    if (!targetBulletinId) {
+      return res.status(400).json({ error: 'Bulletin resource ID is required' });
+    }
+
+    const taskExists = queryOne('SELECT id FROM tasks WHERE id = ?', [id]);
+    if (!taskExists) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    const bulletinExists = queryOne('SELECT id FROM bulletin_resources WHERE id = ?', [targetBulletinId]);
+    if (!bulletinExists) {
+      return res.status(404).json({ error: 'Bulletin resource not found' });
+    }
+
+    const now = new Date().toISOString();
+    run('INSERT OR IGNORE INTO task_bulletins (task_id, bulletin_id, created_at) VALUES (?, ?, ?)', [
+      id,
+      targetBulletinId,
+      now,
+    ]);
+
+    res.json({ message: 'Resource linked to task successfully' });
+  } catch (err: any) {
+    console.error('Error linking bulletin to task:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Unlink a bulletin resource from task
+router.delete('/:id/bulletins/:bulletinId', (req: Request, res: Response) => {
+  try {
+    const { id, bulletinId } = req.params;
+    run('DELETE FROM task_bulletins WHERE task_id = ? AND bulletin_id = ?', [id, bulletinId]);
+    res.json({ message: 'Resource unlinked from task successfully' });
+  } catch (err: any) {
+    console.error('Error unlinking bulletin from task:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -631,6 +797,14 @@ router.post('/', (req: Request, res: Response) => {
             VALUES (?, ?, ?, ?, ?, ?)
           `, [actId, taskId, userId || assigneeId || null, 'TASK_CREATED', `Task created as part of linked group ${generatedGroupId}`, now]);
 
+          // Initial discipline interface (defaults to Instrument)
+          const itfId = `itf-${crypto.randomUUID().slice(0, 8)}`;
+          const initialDiscipline = req.body.discipline || req.body.interfaceDiscipline || 'Instrument';
+          run(`
+            INSERT INTO task_interfaces (id, task_id, discipline, action, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `, [itfId, taskId, initialDiscipline, `Discipline scope: ${initialDiscipline}`, 'OPEN', now, now]);
+
           createdTaskIds.push(taskId);
         }
       });
@@ -713,6 +887,14 @@ router.post('/', (req: Request, res: Response) => {
         INSERT INTO task_activities (id, task_id, user_id, activity_type, note, created_at)
         VALUES (?, ?, ?, ?, ?, ?)
       `, [actId, taskId, userId || assigneeId || null, 'TASK_CREATED', 'Task created in system', now]);
+
+      // Initial discipline interface (defaults to Instrument)
+      const itfId = `itf-${crypto.randomUUID().slice(0, 8)}`;
+      const initialDiscipline = req.body.discipline || req.body.interfaceDiscipline || 'Instrument';
+      run(`
+        INSERT INTO task_interfaces (id, task_id, discipline, action, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `, [itfId, taskId, initialDiscipline, `Discipline scope: ${initialDiscipline}`, 'OPEN', now, now]);
     });
 
     res.status(201).json({ id: taskId, group_id: group_id || null, message: 'Task created successfully' });
@@ -1092,9 +1274,165 @@ router.put('/:id', (req: Request, res: Response) => {
       }
     });
 
-    res.json({ message: 'Task updated successfully', group_id: activeGroupId });
+    const updated = queryOne<any>('SELECT * FROM tasks WHERE id = ?', [id]);
+    let activeInterfacesWarning: string | null = null;
+    if (updated && updated.status === 'DONE') {
+      const activeItfs = query<{ discipline: string }>(
+        'SELECT discipline FROM task_interfaces WHERE task_id = ? AND status IN ("OPEN", "WAITING")',
+        [id]
+      );
+      if (activeItfs.length > 0) {
+        activeInterfacesWarning = `Task marked DONE, but has ${activeItfs.length} active interface(s) (${activeItfs.map((i) => i.discipline).join(', ')}) still OPEN or WAITING.`;
+      }
+    }
+
+    res.json({ message: 'Task updated successfully', group_id: activeGroupId, activeInterfacesWarning });
   } catch (err: any) {
     console.error('Error updating task:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get task interfaces
+router.get('/:id/interfaces', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const interfaces = query(`
+      SELECT *
+      FROM task_interfaces
+      WHERE task_id = ?
+      ORDER BY 
+        CASE 
+          WHEN status = 'WAITING' THEN 1
+          WHEN status = 'OPEN' THEN 2
+          WHEN status = 'RECEIVED' THEN 3
+          WHEN status = 'CLOSED' THEN 4
+          ELSE 5
+        END,
+        due_date ASC,
+        created_at DESC
+    `, [id]);
+    res.json({ interfaces });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Add interface to task
+router.post('/:id/interfaces', (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const task = queryOne('SELECT id, title FROM tasks WHERE id = ?', [id]);
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    const {
+      discipline,
+      action,
+      external_pic,
+      external_email,
+      due_date,
+      last_follow_up,
+      next_follow_up,
+      status = 'OPEN',
+      priority = 'MEDIUM',
+      note,
+      userId,
+    } = req.body;
+
+    if (!discipline || !discipline.trim()) {
+      return res.status(400).json({ error: 'discipline is required' });
+    }
+
+    if (!action || !action.trim()) {
+      return res.status(400).json({ error: 'action description is required' });
+    }
+
+    const itfId = `itf-${crypto.randomUUID().slice(0, 8)}`;
+    const now = new Date().toISOString();
+
+    withTransaction(() => {
+      run(`
+        INSERT INTO task_interfaces (
+          id, task_id, discipline, external_pic, external_email, action,
+          due_date, last_follow_up, next_follow_up, status, priority,
+          note, resolution_date, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        itfId,
+        id,
+        discipline.trim(),
+        external_pic?.trim() || null,
+        external_email?.trim() || null,
+        action.trim(),
+        due_date || null,
+        last_follow_up || null,
+        next_follow_up || null,
+        status,
+        priority,
+        note?.trim() || null,
+        status === 'CLOSED' || status === 'RECEIVED' ? getTodayYmd() : null,
+        now,
+        now,
+      ]);
+
+      const actId = `act-${crypto.randomUUID().slice(0, 8)}`;
+      run(`
+        INSERT INTO task_activities (id, task_id, user_id, activity_type, field_name, new_value, note, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        actId,
+        id,
+        userId || null,
+        'INTERFACE_ADDED',
+        'interface',
+        discipline,
+        `Added ${discipline} interface: "${action.trim().slice(0, 80)}"`,
+        now,
+      ]);
+
+      run('UPDATE tasks SET updated_at = ? WHERE id = ?', [now, id]);
+    });
+
+    const created = queryOne('SELECT * FROM task_interfaces WHERE id = ?', [itfId]);
+    res.status(201).json(created);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete interface from task
+router.delete('/:id/interfaces/:interfaceId', (req: Request, res: Response) => {
+  try {
+    const { id, interfaceId } = req.params;
+    const existing = queryOne('SELECT * FROM task_interfaces WHERE id = ? AND task_id = ?', [interfaceId, id]);
+    if (!existing) {
+      return res.status(404).json({ error: 'Interface not found for this task' });
+    }
+
+    const now = new Date().toISOString();
+    withTransaction(() => {
+      run('DELETE FROM task_interfaces WHERE id = ?', [interfaceId]);
+
+      const actId = `act-${crypto.randomUUID().slice(0, 8)}`;
+      run(`
+        INSERT INTO task_activities (id, task_id, user_id, activity_type, note, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `, [
+        actId,
+        id,
+        null,
+        'INTERFACE_DELETED',
+        `Removed ${existing.discipline} interface: "${existing.action.slice(0, 80)}"`,
+        now,
+      ]);
+
+      run('UPDATE tasks SET updated_at = ? WHERE id = ?', [now, id]);
+    });
+
+    res.json({ message: 'Interface deleted successfully' });
+  } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });

@@ -43,8 +43,29 @@ import {
   Activity,
   Trash2,
   Loader2,
+  Bookmark,
+  ExternalLink,
+  Copy,
+  Users,
+  UserCheck,
+  Inbox,
 } from 'lucide-react';
+import { UserAvatar } from '../components/UserAvatar';
 import { formatDateDisplay, formatShortDate, formatDateDdMmYyyy, getDeadlineBadge, getScheduleVariance } from '../lib/dateUtils';
+
+const DISCIPLINE_COLORS: Record<string, { bg: string; text: string; border: string }> = {
+  Process: { bg: 'bg-cyan-50 dark:bg-cyan-950/60', text: 'text-cyan-700 dark:text-cyan-300', border: 'border-cyan-200 dark:border-cyan-800' },
+  Piping: { bg: 'bg-amber-50 dark:bg-amber-950/60', text: 'text-amber-700 dark:text-amber-300', border: 'border-amber-200 dark:border-amber-800' },
+  Electrical: { bg: 'bg-purple-50 dark:bg-purple-950/60', text: 'text-purple-700 dark:text-purple-300', border: 'border-purple-200 dark:border-purple-800' },
+  Mechanical: { bg: 'bg-indigo-50 dark:bg-indigo-950/60', text: 'text-indigo-700 dark:text-indigo-300', border: 'border-indigo-200 dark:border-indigo-800' },
+  Structural: { bg: 'bg-blue-50 dark:bg-blue-950/60', text: 'text-blue-700 dark:text-blue-300', border: 'border-blue-200 dark:border-blue-800' },
+  Pipeline: { bg: 'bg-teal-50 dark:bg-teal-950/60', text: 'text-teal-700 dark:text-teal-300', border: 'border-teal-200 dark:border-teal-800' },
+  Safety: { bg: 'bg-rose-50 dark:bg-rose-950/60', text: 'text-rose-700 dark:text-rose-300', border: 'border-rose-200 dark:border-rose-800' },
+  EMT: { bg: 'bg-emerald-50 dark:bg-emerald-950/60', text: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-200 dark:border-emerald-800' },
+  PMT: { bg: 'bg-sky-50 dark:bg-sky-950/60', text: 'text-sky-700 dark:text-sky-300', border: 'border-sky-200 dark:border-sky-800' },
+  Instrument: { bg: 'bg-blue-50 dark:bg-blue-950/60', text: 'text-blue-700 dark:text-blue-300', border: 'border-blue-200 dark:border-blue-800' },
+  Other: { bg: 'bg-slate-50 dark:bg-slate-900', text: 'text-slate-700 dark:text-slate-300', border: 'border-slate-200 dark:border-slate-800' },
+};
 
 const STATUS_COLORS: Record<string, string> = {
   TODO: '#64748b',
@@ -127,6 +148,38 @@ export const DashboardView: React.FC = () => {
       setDashboardSelectedTaskIds(stats.urgentTasks.map((t) => t.id));
     } else {
       setDashboardSelectedTaskIds([]);
+    }
+  };
+
+  const handleOpenBulletin = async (b: any) => {
+    try {
+      const res = await api.openBulletin(b.id);
+      if (
+        ['WEB_URL', 'GOOGLE_SHEET', 'GOOGLE_DOCS', 'SHAREPOINT', 'TEAMS', 'VENDOR_PORTAL'].includes(b.resource_type) ||
+        b.location.startsWith('http://') ||
+        b.location.startsWith('https://')
+      ) {
+        window.open(b.location, '_blank', 'noopener,noreferrer');
+      } else {
+        if (res.opened) {
+          showToast('Opened in local application');
+        } else {
+          await navigator.clipboard.writeText(b.location);
+          showToast('Location copied to clipboard: ' + b.location);
+        }
+      }
+    } catch (e: any) {
+      showToast('Could not open resource: ' + e.message);
+    }
+  };
+
+  const handleCopyBulletin = async (b: any) => {
+    try {
+      await navigator.clipboard.writeText(b.location);
+      await api.copyBulletin(b.id);
+      showToast('Copied resource location to clipboard');
+    } catch {
+      showToast('Copied location');
     }
   };
 
@@ -215,6 +268,31 @@ export const DashboardView: React.FC = () => {
     } catch (err: any) {
       showToast(`Error: ${err.message}`);
       fetchStats();
+    }
+  };
+
+  const handleQuickDisciplineChange = async (taskId: string, newDiscipline: string) => {
+    try {
+      const currentTask = (stats?.urgentTasks || []).find((t) => t.id === taskId);
+      const existingItf = currentTask?.interfaces?.[0];
+      if (existingItf) {
+        await api.updateInterface(existingItf.id, {
+          discipline: newDiscipline as any,
+          userId: currentUser?.id,
+        });
+      } else {
+        await api.createInterface({
+          task_id: taskId,
+          discipline: newDiscipline as any,
+          action: `Discipline scope: ${newDiscipline}`,
+          status: 'OPEN',
+          userId: currentUser?.id,
+        });
+      }
+      showToast(`✅ Discipline updated to ${newDiscipline}`);
+      fetchStats();
+    } catch (err: any) {
+      showToast(`Failed to update discipline: ${err.message}`);
     }
   };
 
@@ -405,6 +483,16 @@ export const DashboardView: React.FC = () => {
       if (dashboardSort === 'forecast_desc') return (b.forecast_finish || '').localeCompare(a.forecast_finish || '');
       if (dashboardSort === 'package' || dashboardSort === 'package_asc') return (a.package_code || '').localeCompare(b.package_code || '');
       if (dashboardSort === 'package_desc') return (b.package_code || '').localeCompare(a.package_code || '');
+      if (dashboardSort === 'interface' || dashboardSort === 'interface_asc') {
+        const aItf = (a.interfaces && a.interfaces[0]?.discipline) || 'Instrument';
+        const bItf = (b.interfaces && b.interfaces[0]?.discipline) || 'Instrument';
+        return aItf.localeCompare(bItf);
+      }
+      if (dashboardSort === 'interface_desc') {
+        const aItf = (a.interfaces && a.interfaces[0]?.discipline) || 'Instrument';
+        const bItf = (b.interfaces && b.interfaces[0]?.discipline) || 'Instrument';
+        return bItf.localeCompare(aItf);
+      }
       return (b.created_at || '').localeCompare(a.created_at || '');
     });
 
@@ -682,6 +770,65 @@ export const DashboardView: React.FC = () => {
             <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 font-mono pt-0.5">
               <span>{kpis.done}/{kpis.total} Done</span>
               <span>{kpis.in_progress} Active</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Bulletins / Engineering Resources Quick Hub Widget */}
+      <div 
+        onClick={() => setActiveView('bulletins')}
+        className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-blue-400 dark:hover:border-blue-600 rounded-xl p-3.5 shadow-2xs hover:shadow-xs transition-all cursor-pointer group"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-lg bg-[#0b3b70] text-white shrink-0 group-hover:scale-105 transition-transform">
+              <Bookmark className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wide group-hover:text-blue-600 dark:group-hover:text-sky-400 transition-colors">
+                  BULLETINS & ENGINEERING RESOURCES HUB
+                </h3>
+                <span className="text-[10px] px-1.5 py-0.2 rounded bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-sky-300 font-mono font-semibold">
+                  Quick Access
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Direct access to project Google Sheets, SharePoint links, Teams channels, and network paths
+              </p>
+            </div>
+          </div>
+
+          {/* Metric Badges */}
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <div className="px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center gap-1.5">
+              <span className="text-slate-500 text-[11px]">Pinned Links:</span>
+              <strong className="font-mono text-slate-800 dark:text-slate-200 font-bold">{stats?.bulletinsWidget?.pinned?.length || 0}</strong>
+            </div>
+
+            <div className="px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center gap-1.5">
+              <span className="text-slate-500 text-[11px]">Recently Used:</span>
+              <strong className="font-mono text-slate-800 dark:text-slate-200 font-bold">{stats?.bulletinsWidget?.recent?.length || 0}</strong>
+            </div>
+
+            <div className={`px-2.5 py-1 rounded-lg border flex items-center gap-1.5 ${
+              (stats?.bulletinsWidget?.reviewRequired?.length || 0) > 0
+                ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200'
+                : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+            }`}>
+              <span className="text-[11px]">Review Required:</span>
+              <strong className="font-mono font-bold">{stats?.bulletinsWidget?.reviewRequired?.length || 0}</strong>
+            </div>
+
+            <div className="px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center gap-1.5">
+              <span className="text-slate-500 text-[11px]">Active Notices:</span>
+              <strong className="font-mono text-slate-800 dark:text-slate-200 font-bold">{stats?.bulletinsWidget?.announcements?.length || 0}</strong>
+            </div>
+
+            <div className="flex items-center gap-1 text-blue-600 dark:text-sky-400 font-bold text-xs pl-1">
+              <span>Open Bulletins</span>
+              <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
             </div>
           </div>
         </div>
@@ -1274,6 +1421,7 @@ export const DashboardView: React.FC = () => {
             onQuickStatusChange={handleQuickStatusChange}
             onQuickPriorityChange={handleQuickPriorityChange}
             onQuickProgressChange={handleQuickProgressChange}
+            onQuickDisciplineChange={handleQuickDisciplineChange}
             onDeleteTask={handleDeleteTask}
             onSortChange={handleSortToggle}
             currentSort={dashboardSort}
@@ -1297,11 +1445,166 @@ export const DashboardView: React.FC = () => {
         </div>
       </div>
 
+      {/* 04. Bulletins & Engineering Resources Quick Access Widget */}
+      {stats?.bulletinsWidget && (
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 sm:p-5 shadow-xs transition-colors space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center space-x-2">
+              <span className="px-2 py-0.5 rounded-md bg-[#0b3b70] dark:bg-blue-900 text-white font-mono text-xs font-bold shadow-2xs">04</span>
+              <Bookmark className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wide">
+                Bulletins & Engineering Resources Quick Access
+              </h3>
+              {stats.bulletinsWidget.reviewRequired?.length > 0 && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+                  {stats.bulletinsWidget.reviewRequired.length} Due Review
+                </span>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setActiveView('bulletins')}
+              className="text-xs font-semibold text-[#0b3b70] hover:text-[#0f4c81] dark:text-blue-400 dark:hover:text-blue-300 flex items-center space-x-1 cursor-pointer self-start sm:self-auto"
+            >
+              <span>Explore All Resources</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Pinned Resources Column */}
+            <div className="bg-slate-50/70 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800 rounded-lg p-3.5 space-y-2.5">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider pb-1.5 border-b border-slate-200 dark:border-slate-800">
+                <span className="flex items-center space-x-1.5">
+                  <Bookmark className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                  <span>Pinned Fast Links</span>
+                </span>
+                <span className="text-[10px] font-mono text-slate-400">
+                  {stats.bulletinsWidget.pinned?.length || 0} pinned
+                </span>
+              </div>
+
+              {stats.bulletinsWidget.pinned && stats.bulletinsWidget.pinned.length > 0 ? (
+                <div className="space-y-2">
+                  {stats.bulletinsWidget.pinned.map((b) => (
+                    <div
+                      key={b.id}
+                      className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 flex items-start justify-between gap-2 text-xs hover:border-blue-300 dark:hover:border-blue-700 transition-all shadow-2xs"
+                    >
+                      <div className="min-w-0 flex-1 space-y-0.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                            {b.resource_type}
+                          </span>
+                          <span className="font-semibold text-slate-900 dark:text-slate-100 truncate">
+                            {b.display_name}
+                          </span>
+                        </div>
+                        <div className="text-[10.5px] font-mono text-slate-500 dark:text-slate-400 truncate select-all">
+                          {b.location}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleCopyBulletin(b)}
+                          className="p-1 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 cursor-pointer"
+                          title="Copy link"
+                        >
+                          <Copy className="w-3 h-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenBulletin(b)}
+                          className="px-2 py-1 rounded bg-[#0b3b70] hover:bg-[#0f4c81] text-white font-medium text-[11px] flex items-center gap-1 cursor-pointer shadow-2xs"
+                          title="Open resource"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          <span>Open</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-6 text-xs text-slate-400">
+                  No pinned resources yet. Pin frequently accessed spreadsheets or folders in Bulletins.
+                </div>
+              )}
+            </div>
+
+            {/* Recently Used Column */}
+            <div className="bg-slate-50/70 dark:bg-slate-950/40 border border-slate-200 dark:border-slate-800 rounded-lg p-3.5 space-y-2.5">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider pb-1.5 border-b border-slate-200 dark:border-slate-800">
+                <span className="flex items-center space-x-1.5">
+                  <Clock className="w-3.5 h-3.5 text-blue-500" />
+                  <span>Recently Used</span>
+                </span>
+                <span className="text-[10px] font-mono text-slate-400">
+                  {stats.bulletinsWidget.recent?.length || 0} active
+                </span>
+              </div>
+
+              {stats.bulletinsWidget.recent && stats.bulletinsWidget.recent.length > 0 ? (
+                <div className="space-y-2">
+                  {stats.bulletinsWidget.recent.map((b) => (
+                    <div
+                      key={b.id}
+                      className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 flex items-start justify-between gap-2 text-xs hover:border-blue-300 dark:hover:border-blue-700 transition-all shadow-2xs"
+                    >
+                      <div className="min-w-0 flex-1 space-y-0.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                            {b.resource_type}
+                          </span>
+                          <span className="font-semibold text-slate-900 dark:text-slate-100 truncate">
+                            {b.display_name}
+                          </span>
+                        </div>
+                        <div className="text-[10.5px] font-mono text-slate-500 dark:text-slate-400 truncate select-all">
+                          {b.location}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleCopyBulletin(b)}
+                          className="p-1 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 cursor-pointer"
+                          title="Copy link"
+                        >
+                          <Copy className="w-3 h-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenBulletin(b)}
+                          className="px-2 py-1 rounded bg-[#0b3b70] hover:bg-[#0f4c81] text-white font-medium text-[11px] flex items-center gap-1 cursor-pointer shadow-2xs"
+                          title="Open resource"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                          <span>Open</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-6 text-xs text-slate-400">
+                  No recently opened resources yet. Items you open will show up here for 1-click access.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Recent Engineering Activity Log */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 sm:p-5 shadow-xs transition-colors">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 mb-3">
           <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wide flex items-center space-x-2">
-            <span className="px-2 py-0.5 rounded-md bg-[#0b3b70] dark:bg-blue-900 text-white font-mono text-xs font-bold shadow-2xs">04</span>
+            <span className="px-2 py-0.5 rounded-md bg-[#0b3b70] dark:bg-blue-900 text-white font-mono text-xs font-bold shadow-2xs">05</span>
             <History className="w-4 h-4 text-slate-600 dark:text-slate-400" />
             <span>Recent Work Activity History</span>
           </h3>

@@ -70,6 +70,7 @@ export const TaskListView: React.FC = () => {
   const [forecastFilter, setForecastFilter] = useState<string>('all');
   const [progressFilter, setProgressFilter] = useState('ALL');
   const [picFilter, setPicFilter] = useState('ALL');
+  const [interfaceFilter, setInterfaceFilter] = useState('ALL');
   const [sortField, setSortField] = useState('created_desc');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -95,6 +96,7 @@ export const TaskListView: React.FC = () => {
         forecastFilter: forecastFilter !== 'all' ? forecastFilter : undefined,
         progress: progressFilter !== 'ALL' ? progressFilter : undefined,
         pic: picFilter !== 'ALL' ? picFilter : undefined,
+        interface: interfaceFilter !== 'ALL' ? interfaceFilter : undefined,
         sort: sortField,
         limit: 200,
       });
@@ -118,6 +120,7 @@ export const TaskListView: React.FC = () => {
     forecastFilter,
     progressFilter,
     picFilter,
+    interfaceFilter,
     sortField,
     dataVersion,
     showToast,
@@ -259,6 +262,55 @@ export const TaskListView: React.FC = () => {
     }
   };
 
+  const handleQuickDisciplineChange = async (taskId: string, newDiscipline: string) => {
+    const currentTask = tasks.find((t) => t.id === taskId);
+    const existingItf = currentTask?.interfaces?.[0];
+
+    // Optimistic local update
+    setTasks((prev) =>
+      prev.map((t) => {
+        if (t.id !== taskId) return t;
+        const currentInterfaces = t.interfaces && t.interfaces.length > 0 ? [...t.interfaces] : [];
+        if (currentInterfaces.length > 0) {
+          currentInterfaces[0] = { ...currentInterfaces[0], discipline: newDiscipline as any };
+        } else {
+          currentInterfaces.push({
+            id: `temp-${Date.now()}`,
+            task_id: taskId,
+            discipline: newDiscipline as any,
+            action: `Discipline scope: ${newDiscipline}`,
+            status: 'OPEN',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+        }
+        return { ...t, interfaces: currentInterfaces };
+      })
+    );
+
+    try {
+      if (existingItf) {
+        await api.updateInterface(existingItf.id, {
+          discipline: newDiscipline as any,
+          userId: currentUser?.id,
+        });
+      } else {
+        await api.createInterface({
+          task_id: taskId,
+          discipline: newDiscipline as any,
+          action: `Discipline scope: ${newDiscipline}`,
+          status: 'OPEN',
+          userId: currentUser?.id,
+        });
+      }
+      showToast(`✅ Discipline updated to ${newDiscipline}`);
+      refreshData();
+    } catch (err: any) {
+      showToast(`Failed to update discipline: ${err.message}`);
+      fetchTasks();
+    }
+  };
+
   const handleDeleteTask = (taskId: string) => {
     const target = tasks.find((t) => t.id === taskId);
     if (target) {
@@ -302,6 +354,7 @@ export const TaskListView: React.FC = () => {
     setForecastFilter('all');
     setProgressFilter('ALL');
     setPicFilter('ALL');
+    setInterfaceFilter('ALL');
     setSortField('created_desc');
     setSearchQuery('');
   };
@@ -314,6 +367,7 @@ export const TaskListView: React.FC = () => {
     categoryFilter !== 'ALL' ||
     filterTagId !== null ||
     picFilter !== 'ALL' ||
+    interfaceFilter !== 'ALL' ||
     deadlineFilter !== 'all' ||
     forecastFilter !== 'all' ||
     progressFilter !== 'ALL' ||
@@ -644,6 +698,7 @@ export const TaskListView: React.FC = () => {
             onQuickPriorityChange={handleQuickPriorityChange}
             onQuickProgressChange={handleQuickProgressChange}
             onQuickPicsChange={handleQuickPicsChange}
+            onQuickDisciplineChange={handleQuickDisciplineChange}
             onDeleteTask={handleDeleteTask}
             onSortChange={handleSortToggle}
             currentSort={sortField}
@@ -663,6 +718,8 @@ export const TaskListView: React.FC = () => {
             onProgressFilterChange={setProgressFilter}
             picFilter={picFilter}
             onPicFilterChange={setPicFilter}
+            interfaceFilter={interfaceFilter}
+            onInterfaceFilterChange={setInterfaceFilter}
             onResetColumnFilters={resetAllFilters}
           />
         )}
@@ -692,6 +749,7 @@ export const TaskListView: React.FC = () => {
           category: categories.find((c) => c.id === categoryFilter)?.name,
           searchQuery: searchQuery || undefined,
           pic: picFilter !== 'ALL' ? picFilter : undefined,
+          interface: interfaceFilter !== 'ALL' ? interfaceFilter : undefined,
         }}
         workspaceBranding={workspaceBranding}
         projects={projects}

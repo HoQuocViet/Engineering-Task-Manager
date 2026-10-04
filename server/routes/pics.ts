@@ -11,7 +11,7 @@ router.get('/', (req: Request, res: Response) => {
       SELECT * FROM pics 
       ORDER BY 
         CASE 
-          WHEN name LIKE '%Tôi%' OR name LIKE '%Ho Quoc Viet%' THEN 0 
+          WHEN name LIKE '%(Me)%' OR name LIKE '%Tôi%' OR name LIKE '%Ho Quoc Viet%' THEN 0 
           ELSE 1 
         END ASC,
         created_at ASC

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { api } from '../../lib/api';
-import { TaskPriority, TaskType, TaskStatus } from '../../types';
+import { TaskPriority, TaskType, TaskStatus, INTERFACE_DISCIPLINES, InterfaceDiscipline } from '../../types';
 import { getTodayYmd, getDeadlineBadge } from '../../lib/dateUtils';
 import { X, Plus, Calendar, Clock, Sparkles, RotateCcw, Loader2, Layers, CheckSquare, Square, Link2, Search, Users } from 'lucide-react';
 import { DatePicker } from '../common/DatePicker';
@@ -29,6 +29,7 @@ export const QuickTaskModal: React.FC<QuickTaskModalProps> = ({
   const [type, setType] = useState<TaskType>('TASK');
   const [priority, setPriority] = useState<TaskPriority>('MEDIUM');
   const [status, setStatus] = useState<TaskStatus>('TODO');
+  const [discipline, setDiscipline] = useState<InterfaceDiscipline>('Instrument');
   const [projectId, setProjectId] = useState<string>(defaultProjectId || filterProjectId || '');
   const [packageId, setPackageId] = useState<string>(defaultPackageId || '');
   const [categoryId, setCategoryId] = useState<string>('');
@@ -159,6 +160,7 @@ export const QuickTaskModal: React.FC<QuickTaskModalProps> = ({
           type,
           priority,
           status,
+          discipline,
           progress: status === 'DONE' ? 100 : 0,
           pics,
           category_id: categoryId || null,
@@ -186,6 +188,7 @@ export const QuickTaskModal: React.FC<QuickTaskModalProps> = ({
           type,
           priority,
           status,
+          discipline,
           progress: status === 'DONE' ? 100 : 0,
           pics,
           project_id: targetProj,
@@ -206,6 +209,7 @@ export const QuickTaskModal: React.FC<QuickTaskModalProps> = ({
       setSelectedTagIds([]);
       setSelectedPackageIds([]);
       setPics([]);
+      setDiscipline('Instrument');
       onCreated();
       onClose();
     } catch (err: any) {
@@ -382,17 +386,17 @@ Technical Description:
             </div>
           </div>
 
-          {/* Type & Priority Row */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* Type, Priority & Discipline Row */}
+          <div className="grid grid-cols-3 gap-2.5">
             <div>
               <label className="block text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">Task Type</label>
               <select
                 value={type}
                 onChange={(e) => setType(e.target.value as TaskType)}
-                className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg px-2 py-1.5 font-mono outline-none cursor-pointer"
+                className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg px-2 py-1.5 font-mono text-xs outline-none cursor-pointer"
               >
                 <option value="TASK">TASK</option>
-                <option value="NOTE">NOTE (Notebook)</option>
+                <option value="NOTE">NOTE</option>
                 <option value="FOLLOW-UP">FOLLOW-UP</option>
                 <option value="MILESTONE">MILESTONE</option>
               </select>
@@ -403,7 +407,7 @@ Technical Description:
               <select
                 value={priority}
                 onChange={(e) => setPriority(e.target.value as TaskPriority)}
-                className={`w-full border rounded-lg px-2 py-1.5 font-medium outline-none cursor-pointer ${
+                className={`w-full border rounded-lg px-2 py-1.5 font-medium text-xs outline-none cursor-pointer ${
                   priority === 'CRITICAL'
                     ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300 font-bold'
                     : priority === 'HIGH'
@@ -411,10 +415,23 @@ Technical Description:
                     : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200'
                 }`}
               >
-                <option value="CRITICAL">🔴 CRITICAL (Red)</option>
-                <option value="HIGH">🟠 HIGH (Orange)</option>
-                <option value="MEDIUM">🟡 MEDIUM (Yellow)</option>
-                <option value="LOW">⚪ LOW (Neutral)</option>
+                <option value="CRITICAL">🔴 CRITICAL</option>
+                <option value="HIGH">🟠 HIGH</option>
+                <option value="MEDIUM">🟡 MEDIUM</option>
+                <option value="LOW">⚪ LOW</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">Discipline</label>
+              <select
+                value={discipline}
+                onChange={(e) => setDiscipline(e.target.value as InterfaceDiscipline)}
+                className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg px-2 py-1.5 font-medium text-xs outline-none cursor-pointer"
+              >
+                {INTERFACE_DISCIPLINES.map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
               </select>
             </div>
           </div>

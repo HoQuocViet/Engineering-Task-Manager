@@ -31,6 +31,12 @@ import {
   Plus,
   Sun,
   Moon,
+  Bookmark,
+  Inbox,
+  Clock,
+  Pin,
+  PinOff,
+  X,
 } from 'lucide-react';
 
 export const renderBrandingIcon = (
@@ -133,7 +139,61 @@ export const Sidebar: React.FC = () => {
     openNewTaskModal,
     toggleTheme,
     resolvedTheme,
+    isSidebarPinned,
+    toggleSidebarPinned,
+    isSidebarOpen,
+    setIsSidebarOpen,
+    showToast,
   } = useApp();
+
+  const [isMobile, setIsMobile] = React.useState<boolean>(() => {
+    return typeof window !== 'undefined' ? window.innerWidth < 1024 : false;
+  });
+
+  React.useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 1024);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const isOverlay = !isSidebarPinned || isMobile;
+
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOverlay && isSidebarOpen) {
+        setIsSidebarOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOverlay, isSidebarOpen, setIsSidebarOpen]);
+
+  const hideTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleSidebarMouseEnter = () => {
+    if (hideTimeoutRef.current) {
+      clearTimeout(hideTimeoutRef.current);
+      hideTimeoutRef.current = null;
+    }
+  };
+
+  const handleSidebarMouseLeave = () => {
+    if (isOverlay && isSidebarOpen) {
+      if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current);
+      hideTimeoutRef.current = setTimeout(() => {
+        setIsSidebarOpen(false);
+      }, 350);
+    }
+  };
+
+  const handleNavClick = (callback: () => void) => {
+    callback();
+    if (isOverlay) {
+      setIsSidebarOpen(false);
+    }
+  };
 
   const navItems: Array<{ id: ActiveView; label: string; icon: React.ReactNode; badge?: string; badgeColor?: string }> = [
     {
@@ -163,6 +223,11 @@ export const Sidebar: React.FC = () => {
       badgeColor: 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400',
     },
     {
+      id: 'bulletins',
+      label: 'Bulletins',
+      icon: <Bookmark className="w-4 h-4" />,
+    },
+    {
       id: 'calendar',
       label: 'Deadlines & Calendar',
       icon: <Calendar className="w-4 h-4" />,
@@ -183,16 +248,100 @@ export const Sidebar: React.FC = () => {
   ];
 
   return (
-    <aside className="w-64 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 flex flex-col justify-between shrink-0 border-r border-slate-200 dark:border-slate-800 select-none overflow-hidden h-full transition-colors duration-150">
-      {/* Brand Header */}
+    <aside
+      onMouseEnter={handleSidebarMouseEnter}
+      onMouseLeave={handleSidebarMouseLeave}
+      className={`bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 flex flex-col justify-between shrink-0 border-r border-slate-200 dark:border-slate-800 select-none overflow-hidden h-full transition-all duration-200 ${
+        isOverlay
+          ? `fixed inset-y-0 left-0 z-50 w-64 max-w-[85vw] shadow-2xl ${
+              isSidebarOpen ? 'translate-x-0' : '-translate-x-full pointer-events-none'
+            }`
+          : `relative z-20 w-64 ${isSidebarOpen ? 'block' : 'hidden'}`
+      }`}
+    >
+      {/* Brand Header & Navigation */}
       <div className="flex-1 min-h-0 flex flex-col">
+        {/* Top Control Bar: Pin/Unpin & Close */}
+        <div className="px-3 pt-2 pb-1.5 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 shrink-0 border-b border-slate-100 dark:border-slate-800/80 mb-1 bg-slate-50/70 dark:bg-slate-950/40">
+          <div className="flex items-center gap-1.5">
+            <span
+              className={`w-2 h-2 rounded-full ${
+                isSidebarPinned
+                  ? 'bg-sky-500 shadow-sky-500/50 shadow-xs'
+                  : 'bg-amber-500'
+              }`}
+            />
+            <span className="text-[10px] font-bold tracking-wider uppercase text-slate-700 dark:text-slate-200">
+              {isSidebarPinned ? 'PINNED' : 'AUTO-HIDE'}
+            </span>
+            <span className="text-[9px] text-slate-400 dark:text-slate-500 font-mono hidden sm:inline">
+              ({isSidebarPinned ? 'Fixed' : 'Overlay'})
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1">
+            {/* Pin / Unpin Button */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleSidebarPinned();
+                showToast(
+                  isSidebarPinned
+                    ? 'Sidebar unpinned (auto-hides on mobile/compact view)'
+                    : 'Sidebar pinned (always visible)'
+                );
+              }}
+              className={`px-2 py-0.5 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer ${
+                isSidebarPinned
+                  ? 'bg-sky-100 dark:bg-sky-950/80 text-sky-700 dark:text-sky-300 border border-sky-300 dark:border-sky-800 hover:bg-sky-200 dark:hover:bg-sky-900'
+                  : 'bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 hover:bg-slate-300 dark:hover:bg-slate-700'
+              }`}
+              title={
+                isSidebarPinned
+                  ? 'Sidebar is pinned. Click to unpin (will auto-hide to free up screen space on mobile & desktop).'
+                  : 'Sidebar is unpinned. Click to pin and keep always visible.'
+              }
+              aria-label={isSidebarPinned ? 'Unpin sidebar' : 'Pin sidebar'}
+            >
+              {isSidebarPinned ? (
+                <>
+                  <Pin className="w-3.5 h-3.5 fill-current text-sky-600 dark:text-sky-400 rotate-45" />
+                  <span>Unpin</span>
+                </>
+              ) : (
+                <>
+                  <PinOff className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
+                  <span>Pin</span>
+                </>
+              )}
+            </button>
+
+            {/* Close / Hide Button */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsSidebarOpen(false);
+              }}
+              className="p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/80 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              title="Close sidebar to maximize screen space"
+              aria-label="Close sidebar"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
         <div className="p-1 px-2.5 pb-1 shrink-0">
           <div 
             onClick={() => {
-              setActiveView('settings');
-              setFilterProjectId(null);
-              setFilterPackageId(null);
-              setFilterTagId(null);
+              handleNavClick(() => {
+                setActiveView('settings');
+                setFilterProjectId(null);
+                setFilterPackageId(null);
+                setFilterTagId(null);
+              });
             }}
             className={`h-[62px] min-h-[62px] p-2.5 rounded-xl ${getHeaderBoxClasses(workspaceBranding)} text-white shadow-md hover:shadow-lg hover:border-sky-400/50 flex items-center gap-3 cursor-pointer transition-all group`}
             style={getHeaderBoxStyle(workspaceBranding)}
@@ -220,7 +369,11 @@ export const Sidebar: React.FC = () => {
         {/* Quick Action: New Task Button */}
         <div className="px-2.5 pt-1.5 pb-1 shrink-0">
           <button
-            onClick={() => openNewTaskModal()}
+            onClick={() => {
+              handleNavClick(() => {
+                openNewTaskModal();
+              });
+            }}
             className="w-full bg-[#0b3b70] hover:bg-[#0f4c81] active:bg-[#072346] text-white text-xs font-semibold py-2 px-3 rounded-lg flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
@@ -242,10 +395,12 @@ export const Sidebar: React.FC = () => {
                   <button
                     key={item.id}
                     onClick={() => {
-                      setActiveView(item.id);
-                      setFilterProjectId(null);
-                      setFilterPackageId(null);
-                      setFilterTagId(null);
+                      handleNavClick(() => {
+                        setActiveView(item.id);
+                        setFilterProjectId(null);
+                        setFilterPackageId(null);
+                        setFilterTagId(null);
+                      });
                     }}
                     className={`w-full flex items-center justify-between p-2 rounded-lg text-sm transition-colors cursor-pointer ${
                       isActive
@@ -283,10 +438,12 @@ export const Sidebar: React.FC = () => {
               </span>
               <button
                 onClick={() => {
-                  setActiveView('projects');
-                  setFilterProjectId(null);
-                  setFilterPackageId(null);
-                  setFilterTagId(null);
+                  handleNavClick(() => {
+                    setActiveView('projects');
+                    setFilterProjectId(null);
+                    setFilterPackageId(null);
+                    setFilterTagId(null);
+                  });
                 }}
                 className="text-[10px] text-blue-600 dark:text-blue-400 hover:underline cursor-pointer font-medium normal-case"
               >
@@ -303,13 +460,15 @@ export const Sidebar: React.FC = () => {
                     <button
                       key={proj.id}
                       onClick={() => {
-                        if (isSelected) {
-                          setFilterProjectId(null);
-                        } else {
-                          setFilterProjectId(proj.id);
-                        }
-                        setFilterPackageId(null);
-                        setActiveView('tasks');
+                        handleNavClick(() => {
+                          if (isSelected) {
+                            setFilterProjectId(null);
+                          } else {
+                            setFilterProjectId(proj.id);
+                          }
+                          setFilterPackageId(null);
+                          setActiveView('tasks');
+                        });
                       }}
                       className={`w-full flex items-center justify-between p-1.5 px-2 rounded-md transition-colors cursor-pointer text-left ${
                         isSelected
@@ -365,7 +524,11 @@ export const Sidebar: React.FC = () => {
             <div className="px-2 pb-1.5 text-[11px] font-bold text-blue-900 dark:text-sky-300 uppercase tracking-wider flex items-center justify-between">
               <span>Tags</span>
               <button
-                onClick={() => setActiveView('tags')}
+                onClick={() => {
+                  handleNavClick(() => {
+                    setActiveView('tags');
+                  });
+                }}
                 className="text-[10px] text-blue-600 dark:text-blue-400 hover:underline cursor-pointer font-medium normal-case"
               >
                 View all
@@ -378,12 +541,14 @@ export const Sidebar: React.FC = () => {
                   <button
                     key={tg.id}
                     onClick={() => {
-                      if (isSelected) {
-                        setFilterTagId(null);
-                      } else {
-                        setFilterTagId(tg.id);
-                      }
-                      setActiveView('tasks');
+                      handleNavClick(() => {
+                        if (isSelected) {
+                          setFilterTagId(null);
+                        } else {
+                          setFilterTagId(tg.id);
+                        }
+                        setActiveView('tasks');
+                      });
                     }}
                     className={`w-full flex items-center justify-between p-1.5 px-2 rounded-md text-xs transition-colors cursor-pointer text-left ${
                       isSelected
@@ -415,10 +580,12 @@ export const Sidebar: React.FC = () => {
             </div>
             <button
               onClick={() => {
-                setActiveView('settings');
-                setFilterProjectId(null);
-                setFilterPackageId(null);
-                setFilterTagId(null);
+                handleNavClick(() => {
+                  setActiveView('settings');
+                  setFilterProjectId(null);
+                  setFilterPackageId(null);
+                  setFilterTagId(null);
+                });
               }}
               className={`w-full flex items-center gap-3 p-2 rounded-lg text-sm transition-colors cursor-pointer ${
                 activeView === 'settings'
@@ -448,7 +615,11 @@ export const Sidebar: React.FC = () => {
               {futureModules.map((m) => (
                 <button
                   key={m.code}
-                  onClick={() => setActiveView('future_modules')}
+                  onClick={() => {
+                    handleNavClick(() => {
+                      setActiveView('future_modules');
+                    });
+                  }}
                   className="w-full flex items-center justify-between p-1.5 px-2 text-xs rounded-md text-slate-500 dark:text-slate-400 hover:bg-slate-200/70 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200 transition-colors text-left cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
@@ -467,10 +638,12 @@ export const Sidebar: React.FC = () => {
       <div className="p-2 border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/40 shrink-0">
         <div
           onClick={() => {
-            setActiveView('settings');
-            setFilterProjectId(null);
-            setFilterPackageId(null);
-            setFilterTagId(null);
+            handleNavClick(() => {
+              setActiveView('settings');
+              setFilterProjectId(null);
+              setFilterPackageId(null);
+              setFilterTagId(null);
+            });
           }}
           className="relative flex items-center gap-3 px-2.5 py-2 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900/90 shadow-2xs hover:border-blue-300 dark:hover:border-blue-500/40 hover:shadow-xs transition-all cursor-pointer group"
           title="Click to customize engineer profile and settings"

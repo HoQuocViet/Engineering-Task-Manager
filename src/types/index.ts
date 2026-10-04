@@ -4,6 +4,186 @@ export type TaskPriority = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
 
 export type TaskStatus = 'TODO' | 'IN PROGRESS' | 'WAITING' | 'DONE' | 'CANCELLED' | 'ON HOLD';
 
+export type InterfaceDiscipline = 
+  | 'Instrument'
+  | 'Process'
+  | 'Piping'
+  | 'Mechanical'
+  | 'Electrical'
+  | 'Structural'
+  | 'Pipeline'
+  | 'Safety'
+  | 'EMT'
+  | 'PMT'
+  | 'Other';
+
+export const INTERFACE_DISCIPLINES: InterfaceDiscipline[] = [
+  'Instrument',
+  'Process',
+  'Piping',
+  'Mechanical',
+  'Electrical',
+  'Structural',
+  'Pipeline',
+  'Safety',
+  'EMT',
+  'PMT',
+  'Other',
+];
+
+export const DISCIPLINE_COLORS: Record<string, { bg: string; text: string; border: string }> = {
+  Instrument: { bg: 'bg-blue-50 dark:bg-blue-950/60', text: 'text-blue-700 dark:text-blue-300', border: 'border-blue-200 dark:border-blue-800' },
+  Process: { bg: 'bg-cyan-50 dark:bg-cyan-950/60', text: 'text-cyan-700 dark:text-cyan-300', border: 'border-cyan-200 dark:border-cyan-800' },
+  Piping: { bg: 'bg-amber-50 dark:bg-amber-950/60', text: 'text-amber-700 dark:text-amber-300', border: 'border-amber-200 dark:border-amber-800' },
+  Electrical: { bg: 'bg-purple-50 dark:bg-purple-950/60', text: 'text-purple-700 dark:text-purple-300', border: 'border-purple-200 dark:border-purple-800' },
+  Mechanical: { bg: 'bg-indigo-50 dark:bg-indigo-950/60', text: 'text-indigo-700 dark:text-indigo-300', border: 'border-indigo-200 dark:border-indigo-800' },
+  Structural: { bg: 'bg-emerald-50 dark:bg-emerald-950/60', text: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-200 dark:border-emerald-800' },
+  Pipeline: { bg: 'bg-teal-50 dark:bg-teal-950/60', text: 'text-teal-700 dark:text-teal-300', border: 'border-teal-200 dark:border-teal-800' },
+  Safety: { bg: 'bg-rose-50 dark:bg-rose-950/60', text: 'text-rose-700 dark:text-rose-300', border: 'border-rose-200 dark:border-rose-800' },
+  EMT: { bg: 'bg-emerald-50 dark:bg-emerald-950/60', text: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-200 dark:border-emerald-800' },
+  PMT: { bg: 'bg-sky-50 dark:bg-sky-950/60', text: 'text-sky-700 dark:text-sky-300', border: 'border-sky-200 dark:border-sky-800' },
+  Other: { bg: 'bg-slate-50 dark:bg-slate-900', text: 'text-slate-700 dark:text-slate-300', border: 'border-slate-200 dark:border-slate-800' },
+};
+
+export type InterfaceStatus = 'OPEN' | 'WAITING' | 'RECEIVED' | 'CLOSED' | 'CANCELLED';
+
+export interface TaskInterface {
+  id: string;
+  task_id: string;
+  discipline: InterfaceDiscipline;
+  external_pic?: string;
+  external_email?: string;
+  action: string;
+  due_date?: string | null;
+  last_follow_up?: string | null;
+  next_follow_up?: string | null;
+  status: InterfaceStatus;
+  priority?: TaskPriority;
+  note?: string;
+  resolution_date?: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined context fields
+  task_title?: string;
+  project_id?: string | null;
+  project_code?: string;
+  project_name?: string;
+  package_id?: string | null;
+  package_code?: string;
+  package_name?: string;
+  assignee_id?: string | null;
+  assignee_name?: string;
+  days_waiting?: number;
+}
+
+export interface TaskBulletinResource {
+  task_id: string;
+  bulletin_id: string;
+  created_at: string;
+}
+
+export interface FollowUpItem {
+  id: string;
+  task_id: string;
+  task_title: string;
+  project_id?: string | null;
+  project_code?: string;
+  project_name?: string;
+  package_id?: string | null;
+  package_code?: string;
+  package_name?: string;
+  assignee_id?: string | null;
+  assignee_name?: string;
+  discipline: InterfaceDiscipline;
+  action: string;
+  external_pic?: string;
+  external_email?: string;
+  due_date?: string | null;
+  last_follow_up?: string | null;
+  next_follow_up?: string | null;
+  status: InterfaceStatus;
+  priority: TaskPriority;
+  note?: string;
+  days_waiting: number;
+  urgency: 'OVERDUE' | 'TODAY' | 'UPCOMING' | 'NORMAL';
+  created_at: string;
+  updated_at: string;
+}
+
+export type BulletinResourceType =
+  | 'WEB_URL'
+  | 'GOOGLE_SHEET'
+  | 'GOOGLE_DOCS'
+  | 'SHAREPOINT'
+  | 'TEAMS'
+  | 'NETWORK_FOLDER'
+  | 'LOCAL_FOLDER'
+  | 'NETWORK_FILE'
+  | 'LOCAL_FILE'
+  | 'VENDOR_PORTAL'
+  | 'OTHER';
+
+export type BulletinStatus = 'ACTIVE' | 'ARCHIVED' | 'SUPERSEDED';
+
+export type BulletinHealth = 'ACTIVE' | 'BROKEN' | 'CHECK_FAILED' | 'NOT_CHECKED' | 'ACCESS_REQUIRED';
+
+export interface BulletinResource {
+  id: string;
+  display_name: string;
+  document_title?: string;
+  description?: string;
+  resource_type: BulletinResourceType;
+  location: string;
+  project_id?: string | null;
+  project_name?: string;
+  project_code?: string;
+  package_id?: string | null;
+  package_name?: string;
+  package_code?: string;
+  discipline: string;
+  tags?: string[];
+  owner?: string;
+  priority: 'LOW' | 'NORMAL' | 'HIGH' | 'CRITICAL';
+  pinned: boolean | number;
+  status: BulletinStatus;
+  last_reviewed?: string | null;
+  next_review?: string | null;
+  last_opened?: string | null;
+  open_count: number;
+  replacement_resource_id?: string | null;
+  replacement_resource_name?: string;
+  link_health: BulletinHealth;
+  health_checked_at?: string | null;
+  notes?: string;
+  related_tasks_count?: number;
+  related_tasks?: Array<{ id: string; title: string; status: TaskStatus; priority: TaskPriority }>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BulletinAnnouncement {
+  id: string;
+  title: string;
+  content: string;
+  author_id?: string;
+  author_name?: string;
+  is_pinned: number | boolean;
+  created_at: string;
+}
+
+export interface BulletinFilterOptions {
+  search?: string;
+  type?: string;
+  projectId?: string;
+  packageId?: string;
+  discipline?: string;
+  pinned?: boolean | number | string;
+  status?: string;
+  sort?: string;
+  page?: number;
+  limit?: number;
+}
+
 export interface User {
   id: string;
   name: string;
@@ -14,6 +194,7 @@ export interface User {
   discipline?: string;
   avatar: string;
   is_admin?: number | boolean;
+  is_team_lead?: number | boolean;
   is_active: number;
   created_at: string;
   assigned_task_count?: number;
@@ -158,6 +339,8 @@ export interface Task {
   group_id?: string | null;
   forecast_revision_count?: number;
   linked_tasks_count?: number;
+  interfaces?: TaskInterface[];
+  related_bulletins?: BulletinResource[];
   linked_tasks?: Array<{
     id: string;
     project_id?: string | null;
@@ -258,6 +441,44 @@ export interface DashboardStats {
   deadlineBuckets: Array<{ bucket: string; count: number; color: string }>;
   urgentTasks: Task[];
   recentActivities: TaskActivity[];
+  // Instrument Team Leader Control Center extensions
+  instrumentKpis?: {
+    my_open_tasks: number;
+    team_open_tasks: number;
+    overdue: number;
+    due_this_week: number;
+    waiting: number;
+    interface_open: number;
+    forecast_slip: number;
+    critical_open: number;
+    follow_up_today: number;
+  };
+  teamWorkload?: Array<{
+    id: string;
+    name: string;
+    role: string;
+    avatar: string;
+    open: number;
+    due_this_week: number;
+    overdue: number;
+    waiting: number;
+    avg_progress: number;
+  }>;
+  interfaceFollowUp?: Array<{
+    discipline: InterfaceDiscipline;
+    open: number;
+    waiting: number;
+    received: number;
+    closed: number;
+    total: number;
+  }>;
+  urgentFollowUps?: TaskInterface[];
+  bulletinsWidget?: {
+    pinned: BulletinResource[];
+    recent: BulletinResource[];
+    reviewRequired: BulletinResource[];
+    announcements: BulletinAnnouncement[];
+  };
 }
 
 export interface TaskFilterOptions {
@@ -274,6 +495,11 @@ export interface TaskFilterOptions {
   tagId?: string;
   assigneeId?: string;
   pic?: string;
+  interface?: string;
+  interfaceDiscipline?: string;
+  interfaceStatus?: string;
+  followUpDue?: string;
+  externalPic?: string;
   sort?: string;
   page?: number;
   limit?: number;
@@ -288,7 +514,7 @@ export interface PicMember {
 }
 
 export const DEFAULT_PRESET_PICS: string[] = [
-  'Ho Quoc Viet (Tôi)',
+  'Ho Quoc Viet (Me)',
   'Nguyen Van An',
   'Tran Minh Duc',
   'Le Thi Mai',

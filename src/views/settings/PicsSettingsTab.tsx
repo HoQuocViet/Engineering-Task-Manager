@@ -23,6 +23,7 @@ export const PicsSettingsTab: React.FC = () => {
   const [picRole, setPicRole] = useState('');
   const [picAvatar, setPicAvatar] = useState('');
   const [editingPicId, setEditingPicId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [picSearch, setPicSearch] = useState('');
   const [uploadingForPicId, setUploadingForPicId] = useState<string | null>(null);
 
@@ -31,7 +32,7 @@ export const PicsSettingsTab: React.FC = () => {
   const listFileInputRef = useRef<HTMLInputElement>(null);
 
   const getInitials = (n: string) => {
-    const clean = n.replace(/\s*\(Tôi\)\s*$/, '').trim();
+    const clean = n.replace(/\s*\((?:Tôi|Me)\)\s*$/i, '').trim();
     const parts = clean.split(/\s+/);
     if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
@@ -145,12 +146,14 @@ export const PicsSettingsTab: React.FC = () => {
   };
 
   const handleDeletePic = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to remove "${name}" from Persons In Charge?`)) return;
     try {
       await api.deletePic(id);
       showToast(`Removed "${name}" from PICs`);
       if (editingPicId === id) {
         cancelEditPic();
+      }
+      if (confirmDeleteId === id) {
+        setConfirmDeleteId(null);
       }
       await refreshData();
     } catch (err: any) {
@@ -404,9 +407,9 @@ export const PicsSettingsTab: React.FC = () => {
                       <div className="truncate min-w-0">
                         <div className="font-bold text-slate-900 dark:text-slate-100 flex items-center space-x-2 truncate">
                           <span className="truncate">{member.name}</span>
-                          {member.name.includes('Tôi') && (
+                          {(member.name.includes('(Me)') || member.name.includes('Tôi') || member.name.includes('Ho Quoc Viet')) && (
                             <span className="px-1.5 py-0.2 text-[9.5px] rounded bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 font-semibold font-mono">
-                              You
+                              Me
                             </span>
                           )}
                         </div>
@@ -419,20 +422,41 @@ export const PicsSettingsTab: React.FC = () => {
 
                     {/* Actions */}
                     <div className="flex items-center space-x-1 shrink-0">
-                      <button
-                        onClick={() => startEditPic(member)}
-                        title="Edit name, position, or avatar"
-                        className="p-1.5 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-colors"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDeletePic(member.id, member.name)}
-                        title="Delete PIC member"
-                        className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-colors"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      {confirmDeleteId === member.id ? (
+                        <div className="flex items-center space-x-1 animate-in fade-in duration-100">
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteId(null)}
+                            className="px-2 py-1 text-[10px] text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 cursor-pointer font-medium"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeletePic(member.id, member.name)}
+                            className="px-2.5 py-1 text-[10px] text-white bg-rose-600 hover:bg-rose-700 active:bg-rose-800 rounded font-bold shadow-2xs cursor-pointer"
+                          >
+                            Delete?
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => startEditPic(member)}
+                            title="Edit name, position, or avatar"
+                            className="p-1.5 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-colors"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => setConfirmDeleteId(member.id)}
+                            title="Delete PIC member"
+                            className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 ))

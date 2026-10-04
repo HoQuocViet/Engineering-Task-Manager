@@ -41,11 +41,11 @@ export const PicSelector: React.FC<PicSelectorProps> = ({
     if (Array.isArray(selectedPics)) {
       for (const p of selectedPics) {
         if (!p) continue;
-        const cleanP = p.replace(/\s*\(Tôi\)\s*$/, '').trim().toLowerCase();
+        const cleanP = p.replace(/\s*\((?:Tôi|Me)\)\s*$/i, '').trim().toLowerCase();
         const alreadyCovered = list.some(
           (existing) =>
             existing.toLowerCase() === p.toLowerCase() ||
-            existing.replace(/\s*\(Tôi\)\s*$/, '').trim().toLowerCase() === cleanP
+            existing.replace(/\s*\((?:Tôi|Me)\)\s*$/i, '').trim().toLowerCase() === cleanP
         );
         if (!alreadyCovered) {
           list.push(p);
@@ -58,7 +58,7 @@ export const PicSelector: React.FC<PicSelectorProps> = ({
 
   // Lookup person metadata (avatar, role) by name
   const getPersonInfo = (name: string): { avatar?: string; role?: string } => {
-    const clean = name.replace(/\s*\(Tôi\)\s*$/, '').trim().toLowerCase();
+    const clean = name.replace(/\s*\((?:Tôi|Me)\)\s*$/i, '').trim().toLowerCase();
     const picMatch = registeredPics?.find(
       (p) => p.name.toLowerCase() === clean || p.name.toLowerCase() === name.toLowerCase()
     );
@@ -77,7 +77,7 @@ export const PicSelector: React.FC<PicSelectorProps> = ({
   };
 
   const getInitials = (n: string): string => {
-    const clean = n.replace(/\s*\(Tôi\)\s*$/, '').trim();
+    const clean = n.replace(/\s*\((?:Tôi|Me)\)\s*$/i, '').trim();
     const parts = clean.split(/\s+/);
     if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
@@ -85,20 +85,20 @@ export const PicSelector: React.FC<PicSelectorProps> = ({
 
   const handleSelectPic = (name: string) => {
     if (!name) return;
-    const cleanName = name.replace(/\s*\(Tôi\)\s*$/, '').trim().toLowerCase();
+    const cleanName = name.replace(/\s*\((?:Tôi|Me)\)\s*$/i, '').trim().toLowerCase();
     const alreadySelected = selectedPics.some((p) => {
       if (p === name) return true;
-      return p.replace(/\s*\(Tôi\)\s*$/, '').trim().toLowerCase() === cleanName;
+      return p.replace(/\s*\((?:Tôi|Me)\)\s*$/i, '').trim().toLowerCase() === cleanName;
     });
     if (alreadySelected) return;
     onChange([...selectedPics, name]);
   };
 
   const handleRemovePic = (name: string) => {
-    const cleanName = name.replace(/\s*\(Tôi\)\s*$/, '').trim().toLowerCase();
+    const cleanName = name.replace(/\s*\((?:Tôi|Me)\)\s*$/i, '').trim().toLowerCase();
     onChange(
       selectedPics.filter(
-        (p) => p !== name && p.replace(/\s*\(Tôi\)\s*$/, '').trim().toLowerCase() !== cleanName
+        (p) => p !== name && p.replace(/\s*\((?:Tôi|Me)\)\s*$/i, '').trim().toLowerCase() !== cleanName
       )
     );
   };
@@ -148,7 +148,7 @@ export const PicSelector: React.FC<PicSelectorProps> = ({
           </span>
         ) : (
           selectedPics.map((p) => {
-            const isMe = p.includes('Tôi') || p.includes('Ho Quoc Viet');
+            const isMe = p.includes('Me') || p.includes('Tôi') || p.includes('Ho Quoc Viet');
             const info = getPersonInfo(p);
 
             return (

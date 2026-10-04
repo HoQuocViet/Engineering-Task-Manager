@@ -16,6 +16,8 @@ import systemRouter from './server/routes/system.js';
 import aiRouter from './server/routes/ai.js';
 import outlookRouter from './server/routes/outlook.js';
 import picsRouter from './server/routes/pics.js';
+import bulletinsRouter from './server/routes/bulletins.js';
+import interfacesRouter from './server/routes/interfaces.js';
 import { authenticateUser } from './server/middleware/auth.js';
 
 async function startServer() {
@@ -59,6 +61,8 @@ async function startServer() {
   app.use('/api/outlook', outlookRouter);
   app.use('/api/auth/outlook', outlookRouter);
   app.use('/api/pics', picsRouter);
+  app.use('/api/bulletins', bulletinsRouter);
+  app.use('/api/interfaces', interfacesRouter);
 
   // Vite middleware for development vs Static files for production
   if (process.env.NODE_ENV !== 'production') {

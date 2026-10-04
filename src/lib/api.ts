@@ -1,4 +1,4 @@
-import { Task, Package, Category, Tag, User, Project, DashboardStats, TaskFilterOptions, OutlookEvent, OutlookConfigStatus, PicMember } from '../types';
+import { Task, Package, Category, Tag, User, Project, DashboardStats, TaskFilterOptions, OutlookEvent, OutlookConfigStatus, PicMember, BulletinResource, BulletinAnnouncement, BulletinFilterOptions, TaskInterface, FollowUpItem, InterfaceStatus } from '../types';
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -30,6 +30,7 @@ export type TaskPayload = Omit<Partial<Task>, 'tags'> & {
   syncGroup?: boolean;
   syncGroupPackages?: string[];
   syncGroupProjects?: string[];
+  discipline?: string;
   removeMode?: 'delete' | 'unlink';
 };
 
@@ -50,6 +51,8 @@ export const api = {
     if (filters.tagId) params.set('tagId', filters.tagId);
     if (filters.assigneeId) params.set('assigneeId', filters.assigneeId);
     if (filters.pic) params.set('pic', filters.pic);
+    if (filters.interface) params.set('interface', filters.interface);
+    if (filters.interfaceDiscipline) params.set('interface', filters.interfaceDiscipline);
     if (filters.sort) params.set('sort', filters.sort);
     if (filters.limit) params.set('limit', String(filters.limit));
 
@@ -559,6 +562,295 @@ export const api = {
 
   sampleSyncOutlook: async (): Promise<{ success: boolean; count: number; last_synced_at: string }> => {
     const res = await fetch('/api/outlook/sample-sync', { method: 'POST' });
+    return handleResponse(res);
+  },
+
+  // Bulletins / Engineering Resources
+  getBulletins: async (
+    filters: BulletinFilterOptions = {}
+  ): Promise<{
+    resources: BulletinResource[];
+    total: number;
+    page: number;
+    limit: number;
+    pinnedCount: number;
+    recentCount: number;
+    reviewRequiredCount: number;
+  }> => {
+    const params = new URLSearchParams();
+    if (filters.search) params.set('search', filters.search);
+    if (filters.type) params.set('type', filters.type);
+    if (filters.projectId) params.set('projectId', filters.projectId);
+    if (filters.packageId) params.set('packageId', filters.packageId);
+    if (filters.discipline) params.set('discipline', filters.discipline);
+    if (filters.pinned !== undefined && filters.pinned !== '') params.set('pinned', String(filters.pinned));
+    if (filters.status) params.set('status', filters.status);
+    if (filters.sort) params.set('sort', filters.sort);
+    if (filters.page) params.set('page', String(filters.page));
+    if (filters.limit) params.set('limit', String(filters.limit));
+
+    const res = await fetch(`/api/bulletins?${params.toString()}`);
+    return handleResponse(res);
+  },
+
+  getBulletin: async (id: string): Promise<BulletinResource> => {
+    const res = await fetch(`/api/bulletins/${id}`);
+    return handleResponse(res);
+  },
+
+  createBulletin: async (
+    data: Partial<BulletinResource>
+  ): Promise<{ id: string; message: string; isDuplicateWarning?: boolean; duplicateExistingName?: string }> => {
+    const res = await fetch('/api/bulletins', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(res);
+  },
+
+  updateBulletin: async (id: string, data: Partial<BulletinResource>): Promise<{ message: string }> => {
+    const res = await fetch(`/api/bulletins/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(res);
+  },
+
+  deleteBulletin: async (id: string): Promise<{ message: string }> => {
+    const res = await fetch(`/api/bulletins/${id}`, {
+      method: 'DELETE',
+    });
+    return handleResponse(res);
+  },
+
+  pinBulletin: async (id: string, pinned?: boolean): Promise<{ pinned: boolean; message: string }> => {
+    const res = await fetch(`/api/bulletins/${id}/pin`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pinned }),
+    });
+    return handleResponse(res);
+  },
+
+  openBulletin: async (
+    id: string
+  ): Promise<{
+    success: boolean;
+    opened: boolean;
+    canOpenLocally?: boolean;
+    open_count: number;
+    last_opened: string;
+    message?: string;
+    location: string;
+    isWeb?: boolean;
+  }> => {
+    const res = await fetch(`/api/bulletins/${id}/open`, {
+      method: 'POST',
+    });
+    return handleResponse(res);
+  },
+
+  copyBulletin: async (id: string): Promise<{ success: boolean; open_count: number; last_opened: string }> => {
+    const res = await fetch(`/api/bulletins/${id}/copy`, {
+      method: 'POST',
+    });
+    return handleResponse(res);
+  },
+
+  archiveBulletin: async (id: string): Promise<{ message: string }> => {
+    const res = await fetch(`/api/bulletins/${id}/archive`, {
+      method: 'POST',
+    });
+    return handleResponse(res);
+  },
+
+  restoreBulletin: async (id: string): Promise<{ message: string }> => {
+    const res = await fetch(`/api/bulletins/${id}/restore`, {
+      method: 'POST',
+    });
+    return handleResponse(res);
+  },
+
+  replaceBulletin: async (
+    id: string,
+    replacementResourceId: string,
+    newStatus = 'SUPERSEDED'
+  ): Promise<{ message: string; replacementName?: string }> => {
+    const res = await fetch(`/api/bulletins/${id}/replace`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ replacementResourceId, newStatus }),
+    });
+    return handleResponse(res);
+  },
+
+  checkBulletinHealth: async (id: string): Promise<{ link_health: string; health_checked_at: string }> => {
+    const res = await fetch(`/api/bulletins/${id}/check`, {
+      method: 'POST',
+    });
+    return handleResponse(res);
+  },
+
+  detectBulletinTitle: async (url: string): Promise<{ title: string | null; detectedType: string }> => {
+    const res = await fetch(`/api/bulletins/detect-title?url=${encodeURIComponent(url)}`);
+    return handleResponse(res);
+  },
+
+  getBulletinAnnouncements: async (): Promise<BulletinAnnouncement[]> => {
+    const res = await fetch('/api/bulletins/announcements');
+    return handleResponse(res);
+  },
+
+  createBulletinAnnouncement: async (data: {
+    title: string;
+    content: string;
+    author_id?: string;
+    is_pinned?: boolean | number;
+  }): Promise<{ id: string; message: string }> => {
+    const res = await fetch('/api/bulletins/announcements', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(res);
+  },
+
+  deleteBulletinAnnouncement: async (id: string): Promise<{ message: string }> => {
+    const res = await fetch(`/api/bulletins/announcements/${id}`, {
+      method: 'DELETE',
+    });
+    return handleResponse(res);
+  },
+
+  linkTaskBulletin: async (taskId: string, bulletinId: string): Promise<{ message: string }> => {
+    const res = await fetch(`/api/tasks/${taskId}/bulletins`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bulletinId }),
+    });
+    return handleResponse(res);
+  },
+
+  unlinkTaskBulletin: async (taskId: string, bulletinId: string): Promise<{ message: string }> => {
+    const res = await fetch(`/api/tasks/${taskId}/bulletins/${bulletinId}`, {
+      method: 'DELETE',
+    });
+    return handleResponse(res);
+  },
+
+  // Task Multidisciplinary Interfaces & Follow-Up Queue API
+  getInterfaces: async (params?: {
+    taskId?: string;
+    status?: string;
+    discipline?: string;
+    filter?: string;
+    search?: string;
+    sort?: string;
+  }): Promise<{ interfaces: TaskInterface[]; total: number }> => {
+    const query = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== '') query.append(k, String(v));
+      });
+    }
+    const res = await fetch(`/api/interfaces?${query.toString()}`);
+    return handleResponse(res);
+  },
+
+  getFollowUps: async (params?: {
+    filter?: string;
+    discipline?: string;
+    search?: string;
+  }): Promise<{
+    counts: {
+      today: number;
+      overdue: number;
+      next7Days: number;
+      next14Days: number;
+      waiting: number;
+      open: number;
+      totalActive: number;
+    };
+    items: FollowUpItem[];
+  }> => {
+    const query = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== '') query.append(k, String(v));
+      });
+    }
+    const res = await fetch(`/api/interfaces/follow-ups?${query.toString()}`);
+    return handleResponse(res);
+  },
+
+  getInterfacesSummary: async (): Promise<{
+    summary: Array<{
+      discipline: string;
+      open: number;
+      waiting: number;
+      received: number;
+      closed: number;
+      total: number;
+    }>;
+  }> => {
+    const res = await fetch('/api/interfaces/summary');
+    return handleResponse(res);
+  },
+
+  getInterface: async (id: string): Promise<TaskInterface> => {
+    const res = await fetch(`/api/interfaces/${id}`);
+    return handleResponse(res);
+  },
+
+  createInterface: async (data: Partial<TaskInterface> & { userId?: string }): Promise<TaskInterface> => {
+    const res = await fetch('/api/interfaces', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(res);
+  },
+
+  updateInterface: async (id: string, data: Partial<TaskInterface> & { userId?: string }): Promise<TaskInterface> => {
+    const res = await fetch(`/api/interfaces/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(res);
+  },
+
+  updateInterfaceStatus: async (
+    id: string,
+    status: InterfaceStatus,
+    userId?: string
+  ): Promise<{ message: string; status: InterfaceStatus; resolution_date?: string | null }> => {
+    const res = await fetch(`/api/interfaces/${id}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status, userId }),
+    });
+    return handleResponse(res);
+  },
+
+  recordInterfaceFollowUp: async (
+    id: string,
+    data: { next_follow_up?: string | null; note?: string; userId?: string }
+  ): Promise<{ message: string; last_follow_up: string; next_follow_up?: string | null }> => {
+    const res = await fetch(`/api/interfaces/${id}/follow-up`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(res);
+  },
+
+  deleteInterface: async (id: string): Promise<{ message: string }> => {
+    const res = await fetch(`/api/interfaces/${id}`, {
+      method: 'DELETE',
+    });
     return handleResponse(res);
   },
 };

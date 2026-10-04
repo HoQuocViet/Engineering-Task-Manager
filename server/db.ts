@@ -297,12 +297,79 @@ function initSchema(database: Database): void {
       avatar TEXT DEFAULT '',
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS task_interfaces (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      discipline TEXT NOT NULL,
+      external_pic TEXT,
+      external_email TEXT,
+      action TEXT NOT NULL,
+      due_date TEXT,
+      last_follow_up TEXT,
+      next_follow_up TEXT,
+      status TEXT DEFAULT 'OPEN',
+      priority TEXT DEFAULT 'MEDIUM',
+      note TEXT,
+      resolution_date TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS bulletin_resources (
+      id TEXT PRIMARY KEY,
+      display_name TEXT NOT NULL,
+      document_title TEXT,
+      description TEXT,
+      resource_type TEXT NOT NULL,
+      location TEXT NOT NULL,
+      project_id TEXT,
+      package_id TEXT,
+      discipline TEXT DEFAULT 'Instrument',
+      tags TEXT,
+      owner TEXT,
+      priority TEXT DEFAULT 'NORMAL',
+      pinned INTEGER DEFAULT 0,
+      status TEXT DEFAULT 'ACTIVE',
+      last_reviewed TEXT,
+      next_review TEXT,
+      last_opened TEXT,
+      open_count INTEGER DEFAULT 0,
+      replacement_resource_id TEXT,
+      link_health TEXT DEFAULT 'NOT_CHECKED',
+      health_checked_at TEXT,
+      notes TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
+      FOREIGN KEY (package_id) REFERENCES packages(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS task_bulletins (
+      task_id TEXT NOT NULL,
+      bulletin_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (task_id, bulletin_id),
+      FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+      FOREIGN KEY (bulletin_id) REFERENCES bulletin_resources(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS bulletin_announcements (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      author_id TEXT,
+      is_pinned INTEGER DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
   `);
 
   // 2. Safe schema migrations for existing pre-created database tables
   try { database.run('ALTER TABLE projects ADD COLUMN logo TEXT;'); } catch (e) {}
   try { database.run('ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0;'); } catch (e) {}
   try { database.run('ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1;'); } catch (e) {}
+  try { database.run('ALTER TABLE users ADD COLUMN is_team_lead INTEGER DEFAULT 0;'); } catch (e) {}
   try { database.run('ALTER TABLE users ADD COLUMN email TEXT;'); } catch (e) {}
   try { database.run('ALTER TABLE users ADD COLUMN phone TEXT;'); } catch (e) {}
   try { database.run('ALTER TABLE users ADD COLUMN bio TEXT;'); } catch (e) {}
@@ -317,6 +384,7 @@ function initSchema(database: Database): void {
   try { database.run('ALTER TABLE tasks ADD COLUMN group_id TEXT;'); } catch (e) {}
   try { database.run('ALTER TABLE tasks ADD COLUMN forecast_revision_count INTEGER DEFAULT 0;'); } catch (e) {}
   try { database.run('ALTER TABLE tasks ADD COLUMN pics TEXT;'); } catch (e) {}
+  try { database.run('ALTER TABLE task_interfaces ADD COLUMN external_email TEXT;'); } catch (e) {}
   try {
     database.run(`
       UPDATE tasks 
@@ -342,6 +410,23 @@ function initSchema(database: Database): void {
   try { database.run('CREATE INDEX IF NOT EXISTS idx_tasks_group_id ON tasks(group_id);'); } catch (e) {}
   try { database.run('CREATE INDEX IF NOT EXISTS idx_packages_project_id ON packages(project_id);'); } catch (e) {}
   try { database.run('CREATE INDEX IF NOT EXISTS idx_outlook_events_start_date ON outlook_events(start_date);'); } catch (e) {}
+  // Interfaces indices
+  try { database.run('CREATE INDEX IF NOT EXISTS idx_task_interfaces_task_id ON task_interfaces(task_id);'); } catch (e) {}
+  try { database.run('CREATE INDEX IF NOT EXISTS idx_task_interfaces_discipline ON task_interfaces(discipline);'); } catch (e) {}
+  try { database.run('CREATE INDEX IF NOT EXISTS idx_task_interfaces_status ON task_interfaces(status);'); } catch (e) {}
+  try { database.run('CREATE INDEX IF NOT EXISTS idx_task_interfaces_next_follow_up ON task_interfaces(next_follow_up);'); } catch (e) {}
+  try { database.run('CREATE INDEX IF NOT EXISTS idx_task_interfaces_due_date ON task_interfaces(due_date);'); } catch (e) {}
+  // Bulletins indices
+  try { database.run('CREATE INDEX IF NOT EXISTS idx_bulletin_type ON bulletin_resources(resource_type);'); } catch (e) {}
+  try { database.run('CREATE INDEX IF NOT EXISTS idx_bulletin_project ON bulletin_resources(project_id);'); } catch (e) {}
+  try { database.run('CREATE INDEX IF NOT EXISTS idx_bulletin_package ON bulletin_resources(package_id);'); } catch (e) {}
+  try { database.run('CREATE INDEX IF NOT EXISTS idx_bulletin_discipline ON bulletin_resources(discipline);'); } catch (e) {}
+  try { database.run('CREATE INDEX IF NOT EXISTS idx_bulletin_status ON bulletin_resources(status);'); } catch (e) {}
+  try { database.run('CREATE INDEX IF NOT EXISTS idx_bulletin_pinned ON bulletin_resources(pinned);'); } catch (e) {}
+  try { database.run('CREATE INDEX IF NOT EXISTS idx_bulletin_last_opened ON bulletin_resources(last_opened);'); } catch (e) {}
+  try { database.run('CREATE INDEX IF NOT EXISTS idx_bulletin_next_review ON bulletin_resources(next_review);'); } catch (e) {}
+  try { database.run('CREATE INDEX IF NOT EXISTS idx_task_bulletins_task ON task_bulletins(task_id);'); } catch (e) {}
+  try { database.run('CREATE INDEX IF NOT EXISTS idx_task_bulletins_bulletin ON task_bulletins(bulletin_id);'); } catch (e) {}
 
   // 4. Seed default Outlook config with credentials provided if not already exists
   try {
@@ -379,7 +464,7 @@ function initSchema(database: Database): void {
     if (picCount === 0) {
       const now = new Date().toISOString();
       const defaultPics = [
-        { id: 'pic-1', name: 'Ho Quoc Viet (Tôi)', role: 'Project Manager / Lead Engineer' },
+        { id: 'pic-1', name: 'Ho Quoc Viet (Me)', role: 'Project Manager / Lead Engineer' },
         { id: 'pic-2', name: 'Nguyen Van An', role: 'Senior Piping Engineer' },
         { id: 'pic-3', name: 'Tran Minh Duc', role: 'Structural Engineer' },
         { id: 'pic-4', name: 'Le Thi Mai', role: 'Lead Document Controller' },
@@ -398,6 +483,26 @@ function initSchema(database: Database): void {
     }
   } catch (err) {
     console.error('Error ensuring default pics:', err);
+  }
+
+  // Ensure every task has an initial interface discipline (defaults to Instrument)
+  try {
+    const tasksStmt = database.prepare('SELECT id FROM tasks WHERE id NOT IN (SELECT task_id FROM task_interfaces)');
+    const missingTaskIds: string[] = [];
+    while (tasksStmt.step()) {
+      const obj = tasksStmt.getAsObject() as any;
+      if (obj.id) missingTaskIds.push(obj.id);
+    }
+    tasksStmt.free();
+    const now = new Date().toISOString();
+    for (const tId of missingTaskIds) {
+      database.run(
+        'INSERT INTO task_interfaces (id, task_id, discipline, action, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [`itf-seed-${tId.slice(-6)}-${Math.random().toString(36).slice(2, 6)}`, tId, 'Instrument', 'Discipline scope: Instrument', 'OPEN', now, now]
+      );
+    }
+  } catch (err) {
+    console.error('Error ensuring task interfaces:', err);
   }
 }
 

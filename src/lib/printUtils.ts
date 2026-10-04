@@ -10,6 +10,7 @@ export interface PrintFilterInfo {
   category?: string;
   searchQuery?: string;
   pic?: string;
+  interface?: string;
 }
 
 function escapeHtml(str: string): string {
@@ -336,7 +337,15 @@ export function generatePrintReportHtml(
       filterInfo.pic && filterInfo.pic !== 'ALL'
         ? `<div class="filter-item">
             <span class="filter-label">PIC:</span>
-            <span class="filter-value">${escapeHtml(filterInfo.pic === 'UNASSIGNED' ? 'Unassigned' : filterInfo.pic)}</span>
+            <span class="filter-value">${escapeHtml(filterInfo.pic === 'UNASSIGNED' ? 'Unassigned' : filterInfo.pic.replace(/\s*\(Tôi\)\s*$/i, ' (Me)'))}</span>
+          </div>`
+        : ''
+    }
+    ${
+      filterInfo.interface && filterInfo.interface !== 'ALL'
+        ? `<div class="filter-item">
+            <span class="filter-label">Interface:</span>
+            <span class="filter-value">${escapeHtml(filterInfo.interface)}</span>
           </div>`
         : ''
     }
@@ -369,16 +378,16 @@ export function generatePrintReportHtml(
     <thead>
       <tr>
         <th style="width: 24px; text-align: center;">#</th>
-        <th style="width: 60px;">Priority</th>
-        <th style="width: 75px;">Status</th>
-        <th>Task Title / Note Description</th>
-        <th style="width: 125px;">Project / Package</th>
-        <th style="width: 110px;">Person In Charge (PIC)</th>
-        <th style="width: 75px;">Progress</th>
-        <th style="width: 70px;">Deadline</th>
-        <th style="width: 70px;">Forecast</th>
-        <th style="width: 55px;">Variance</th>
-        <th style="width: 90px;">Tags / Cat</th>
+        <th style="width: 58px;">Priority</th>
+        <th style="width: 72px;">Status</th>
+        <th>Task Title / Technical Scope Description</th>
+        <th style="width: 120px;">Project / Package</th>
+        <th style="width: 105px;">Person In Charge (PIC)</th>
+        <th style="width: 75px;">Interface</th>
+        <th style="width: 68px;">Deadline</th>
+        <th style="width: 68px;">Forecast</th>
+        <th style="width: 50px;">Variance</th>
+        <th style="width: 85px;">Tags / Cat</th>
       </tr>
     </thead>
     <tbody>
@@ -446,16 +455,24 @@ export function generatePrintReportHtml(
                     ${
                       Array.isArray(t.pics) && t.pics.length > 0
                         ? `<div style="display: flex; flex-wrap: wrap; gap: 2px;">
-                            ${t.pics.map((p) => `<span class="pic-tag">${escapeHtml(p)}</span>`).join('')}
+                            ${t.pics.map((p) => `<span class="pic-tag">${escapeHtml(p.replace(/\s*\(Tôi\)\s*$/i, ' (Me)'))}</span>`).join('')}
                            </div>`
                         : '<span style="color: #94a3b8; font-style: italic;">Unassigned</span>'
                     }
                   </td>
-                  <td>
-                    <div class="progress-bar-bg">
-                      <div class="progress-bar-fill ${t.progress === 100 ? 'done' : ''}" style="width: ${t.progress || 0}%;"></div>
-                    </div>
-                    <span style="font-family: ui-monospace, monospace; font-weight: 700; font-size: 7pt;">${t.progress || 0}%</span>
+                  <td style="font-size: 7pt; color: #1e293b;">
+                    ${
+                      Array.isArray(t.interfaces) && t.interfaces.length > 0
+                        ? t.interfaces
+                            .map(
+                              (itf) =>
+                                `<span class="badge" style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 6.5pt;">${escapeHtml(
+                                  itf.discipline
+                                )}</span>`
+                            )
+                            .join(' ')
+                        : '<span style="color: #94a3b8; font-family: ui-monospace, monospace;">-</span>'
+                    }
                   </td>
                   <td style="font-family: ui-monospace, monospace; font-size: 7pt;">${deadlineFormatted}</td>
                   <td style="font-family: ui-monospace, monospace; font-size: 7pt;">${forecastFormatted}</td>

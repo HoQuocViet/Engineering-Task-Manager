@@ -13,6 +13,10 @@ export function seedInitialDataIfNeeded(forceReset = false): void {
   console.log('Seeding initial engineering task management database with complete EPC demo dataset...');
 
   if (shouldReset || forceReset) {
+    run('DELETE FROM task_bulletins');
+    run('DELETE FROM bulletin_announcements');
+    run('DELETE FROM bulletin_resources');
+    run('DELETE FROM task_interfaces');
     run('DELETE FROM task_activities');
     run('DELETE FROM task_attachments');
     run('DELETE FROM task_comments');
@@ -35,26 +39,79 @@ export function seedInitialDataIfNeeded(forceReset = false): void {
     return formatYmd(d);
   };
 
-  // 1. Seed Users (Single Primary User Workspace)
+  // 1. Seed Instrument Team Members (Discipline = Instrument)
   const users = [
     {
       id: 'usr-1',
-      name: 'Alex Morgan',
-      role: 'Lead Project & Discipline Engineer',
-      avatar: 'AM',
+      name: 'Ho Quoc Viet (Me)',
+      role: 'Instrument Lead Engineer',
+      avatar: 'HQV',
       email: 'ptscmc.ai11@gmail.com',
       phone: '+84 90 123 4567',
-      discipline: 'Instrumentation & Control',
-      bio: 'Lead Engineer managing EPC deliverables, package follow-ups, and technical squad checks.',
+      discipline: 'Instrument',
+      bio: 'Instrument Team Leader managing offshore EPC deliverables, multidisciplinary interfaces, and package execution.',
       is_admin: 1,
+      is_team_lead: 1,
+      is_active: 1,
+    },
+    {
+      id: 'usr-2',
+      name: 'Tran Minh Duc',
+      role: 'Senior Instrument Engineer',
+      avatar: 'TMD',
+      email: 'duc.tm@ptsc.com.vn',
+      phone: '+84 91 234 5678',
+      discipline: 'Instrument',
+      bio: 'Specialist in fiscal gas metering, custody transfer, and ultrasonic flow measurement systems.',
+      is_admin: 0,
+      is_team_lead: 0,
+      is_active: 1,
+    },
+    {
+      id: 'usr-3',
+      name: 'Le Thi Mai',
+      role: 'Lead Instrument & Control Designer',
+      avatar: 'LTM',
+      email: 'mai.lt@ptsc.com.vn',
+      phone: '+84 93 345 6789',
+      discipline: 'Instrument',
+      bio: 'In charge of cable tray 3D routing, instrument junction box hook-ups, and panel GA drawings.',
+      is_admin: 0,
+      is_team_lead: 0,
+      is_active: 1,
+    },
+    {
+      id: 'usr-4',
+      name: 'Pham Hoang Nam',
+      role: 'Instrument & Safety Systems Engineer',
+      avatar: 'PHN',
+      email: 'nam.ph@ptsc.com.vn',
+      phone: '+84 98 456 7890',
+      discipline: 'Instrument',
+      bio: 'Focuses on SIS / SIL-3 calculations, ESD valves, emergency depressurization, and F&G matrix.',
+      is_admin: 0,
+      is_team_lead: 0,
+      is_active: 1,
+    },
+    {
+      id: 'usr-5',
+      name: 'Doan Tan Phat',
+      role: 'Telecom & Industrial F&G Specialist',
+      avatar: 'DTP',
+      email: 'phat.dt@ptsc.com.vn',
+      phone: '+84 97 567 8901',
+      discipline: 'Instrument',
+      bio: 'Offshore PA/GA, explosion-proof CCTV, subsea acoustic telemetry, and telemetry radio systems.',
+      is_admin: 0,
+      is_team_lead: 0,
       is_active: 1,
     },
   ];
 
   for (const u of users) {
     run(
-      'INSERT OR REPLACE INTO users (id, name, role, avatar, email, phone, bio, discipline, is_admin, is_active, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [u.id, u.name, u.role, u.avatar, u.email, u.phone, u.bio, u.discipline, u.is_admin, u.is_active, formatIso(now)]
+      'INSERT OR REPLACE INTO users (id, name, role, avatar, email, phone, bio, discipline, is_admin, is_team_lead, is_active, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [u.id, u.name, u.role, u.avatar, u.email, u.phone, u.bio, u.discipline, u.is_admin, u.is_team_lead, u.is_active, formatIso(now)]
     );
   }
 
@@ -715,25 +772,25 @@ export function seedInitialDataIfNeeded(forceReset = false): void {
       'tsk-wtg-301': ['Pham Hoang Nam', 'Le Thi Mai'],
       'tsk-ldv-208': ['Pham Hoang Nam', 'Bui Anh Tuan'],
       'tsk-b01-108': ['Pham Hoang Nam', 'Vu Quoc Bao'],
-      'tsk-ldv-207': ['Pham Hoang Nam', 'Ho Quoc Viet (Tôi)'],
+      'tsk-ldv-207': ['Pham Hoang Nam', 'Ho Quoc Viet (Me)'],
       'tsk-b01-107': ['Pham Hoang Nam', 'Vu Quoc Bao'],
       'tsk-ldv-206': ['Tran Minh Duc', 'Vu Quoc Bao'],
       'tsk-b01-106': ['Pham Hoang Nam', 'Tran Minh Duc'],
       'tsk-wtg-307': ['Pham Hoang Nam', 'Le Thi Mai'],
       'tsk-b01-105': ['Pham Hoang Nam', 'Doan Tan Phat'],
-      'tsk-wtg-306': ['Doan Tan Phat', 'Vu Quoc Bao', 'Ho Quoc Viet (Tôi)'],
+      'tsk-wtg-306': ['Doan Tan Phat', 'Vu Quoc Bao', 'Ho Quoc Viet (Me)'],
       'tsk-ldv-204': ['Pham Hoang Nam', 'Bui Anh Tuan'],
-      'tsk-b01-104': ['Nguyen Van An', 'Ho Quoc Viet (Tôi)'],
+      'tsk-b01-104': ['Nguyen Van An', 'Ho Quoc Viet (Me)'],
       'tsk-wtg-305': ['Pham Hoang Nam', 'Vu Quoc Bao'],
       'tsk-ldv-203': ['Pham Hoang Nam', 'Le Thi Mai'],
       'tsk-b01-103': ['Nguyen Van An', 'Bui Anh Tuan'],
       'tsk-wtg-304': ['Nguyen Van An', 'Pham Hoang Nam'],
-      'tsk-ldv-202': ['Pham Hoang Nam', 'Ho Quoc Viet (Tôi)'],
+      'tsk-ldv-202': ['Pham Hoang Nam', 'Ho Quoc Viet (Me)'],
       'tsk-b01-102': ['Nguyen Van An', 'Bui Anh Tuan'],
       'tsk-wtg-303': ['Nguyen Van An', 'Doan Tan Phat'],
       'tsk-ldv-201': ['Pham Hoang Nam', 'Bui Anh Tuan'],
     };
-    const taskPics = picMapping[s.id] || ['Ho Quoc Viet (Tôi)'];
+    const taskPics = picMapping[s.id] || ['Ho Quoc Viet (Me)'];
 
     run(
       `INSERT INTO tasks (
@@ -801,5 +858,361 @@ export function seedInitialDataIfNeeded(forceReset = false): void {
     }
   }
 
-  console.log(`Seeded ${taskSeeds.length} engineering tasks with projects, packages, and full activity logs successfully.`);
+  // 7. Seed Task Interfaces (Multidisciplinary Coordination)
+  const interfaceSeeds = [
+    {
+      id: 'itf-1',
+      task_id: 'tsk-b01-101',
+      discipline: 'Process',
+      external_pic: 'John Smith (Process Lead - john.smith@epc.com)',
+      action: 'Provide updated Gas Composition Analysis & H2S/CO2 stream envelope for metering ultrasonic meters',
+      due_date: addDays(2),
+      last_follow_up: addDays(-1),
+      next_follow_up: addDays(0), // Today!
+      status: 'WAITING',
+      priority: 'HIGH',
+      note: 'Waiting for Process lead confirmation on high CO2 operating envelope (up to 18 mol%)',
+    },
+    {
+      id: 'itf-2',
+      task_id: 'tsk-b01-101',
+      discipline: 'Piping',
+      external_pic: 'Vu Dinh Thang (Piping Lead - thang.vd@ptsc.com.vn)',
+      action: 'Confirm skid edge nozzle orientation & 10D straight pipe spool length per AGA-9',
+      due_date: addDays(3),
+      last_follow_up: addDays(-3),
+      next_follow_up: addDays(1),
+      status: 'OPEN',
+      priority: 'MEDIUM',
+      note: 'Elevation discrepancy on nozzle N1 & N2 flagged to Piping team',
+    },
+    {
+      id: 'itf-3',
+      task_id: 'tsk-b01-101',
+      discipline: 'Electrical',
+      external_pic: 'Nguyen Van Cuong (Senior Electrical Engineer)',
+      action: 'Review skid electrical power supply requirements (400VAC 3-Phase & 24VDC UPS load)',
+      due_date: addDays(-2),
+      last_follow_up: addDays(-2),
+      next_follow_up: addDays(5),
+      status: 'RECEIVED',
+      priority: 'MEDIUM',
+      note: 'Electrical team approved 15kVA UPS load allocation in Rev 01 load list',
+      resolution_date: addDays(-2),
+    },
+    {
+      id: 'itf-4',
+      task_id: 'tsk-b01-102',
+      discipline: 'Safety',
+      external_pic: 'David Miller (Safety & Loss Prevention Lead)',
+      action: 'Confirm SIL-3 PFDavg calculations and API 607 fire-safe certification requirements',
+      due_date: addDays(1),
+      last_follow_up: addDays(-2),
+      next_follow_up: addDays(0), // Today!
+      status: 'OPEN',
+      priority: 'CRITICAL',
+      note: 'Stroke time under 3.0 seconds must be verified with pneumatic quick exhaust boosters',
+    },
+    {
+      id: 'itf-5',
+      task_id: 'tsk-b01-103',
+      discipline: 'Piping',
+      external_pic: 'Vu Dinh Thang (Piping Lead)',
+      action: 'Resolve flange face finish compliance (125-250 AARH) for duplex stainless steel valves',
+      due_date: addDays(-1), // Overdue!
+      last_follow_up: addDays(-4),
+      next_follow_up: addDays(-1), // Follow-up Overdue!
+      status: 'WAITING',
+      priority: 'HIGH',
+      note: 'Piping lead checking piping material class 2500# standard spec Rev C',
+    },
+    {
+      id: 'itf-6',
+      task_id: 'tsk-ldv-101',
+      discipline: 'Mechanical',
+      external_pic: 'Hoang Van Tuan (Mechanical Package Engineer)',
+      action: 'Confirm HPU skid footprint, oil reservoir drainage tray, and crane lifting lugs',
+      due_date: addDays(4),
+      last_follow_up: addDays(-1),
+      next_follow_up: addDays(2),
+      status: 'OPEN',
+      priority: 'MEDIUM',
+      note: 'Skid dry weight is 12.5 metric tons; deck structural load check in progress',
+    },
+    {
+      id: 'itf-7',
+      task_id: 'tsk-wtg-101',
+      discipline: 'EMT',
+      external_pic: 'Nguyen Thanh Long (Commissioning / EMT Lead)',
+      action: 'Review anti-surge CCC control loop dry run test procedure with Solar Turbines vendor',
+      due_date: addDays(5),
+      last_follow_up: addDays(-2),
+      next_follow_up: addDays(3),
+      status: 'OPEN',
+      priority: 'HIGH',
+      note: 'Interface coordination meeting scheduled for next week',
+    },
+    {
+      id: 'itf-8',
+      task_id: 'tsk-wtg-102',
+      discipline: 'PMT',
+      external_pic: 'Pham Quang Huy (Project Manager / PMT)',
+      action: 'Client approval on telecom marine VHF radio spectrum operating license',
+      due_date: addDays(-3),
+      last_follow_up: addDays(-1),
+      next_follow_up: addDays(0), // Today!
+      status: 'WAITING',
+      priority: 'HIGH',
+      note: 'Official dossier submitted to Radio Frequency Directorate; awaiting formal license issue',
+    },
+  ];
+
+  for (const itf of interfaceSeeds) {
+    run(`
+      INSERT OR REPLACE INTO task_interfaces (
+        id, task_id, discipline, external_pic, action, due_date, last_follow_up, next_follow_up,
+        status, priority, note, resolution_date, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      itf.id,
+      itf.task_id,
+      itf.discipline,
+      itf.external_pic,
+      itf.action,
+      itf.due_date,
+      itf.last_follow_up,
+      itf.next_follow_up,
+      itf.status,
+      itf.priority,
+      itf.note,
+      (itf as any).resolution_date || null,
+      formatIso(now),
+      formatIso(now),
+    ]);
+  }
+
+  // 8. Seed Bulletins / Engineering Resources
+  const bulletinSeeds = [
+    {
+      id: 'blt-1',
+      display_name: 'Instrument I/O Master List (Gallaf / Block B)',
+      document_title: 'Instrument I/O Schedule – PRJ-B01 Central Processing Platform Rev 05',
+      description: 'Master I/O database for all analog 4-20mA, HART, digital I/O, and Modbus TCP/IP tags across topside skids.',
+      resource_type: 'GOOGLE_SHEET',
+      location: 'https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit',
+      project_id: 'prj-1',
+      package_id: 'pkg-b01-3',
+      discipline: 'Instrument',
+      tags: JSON.stringify(['IOList', 'Master', 'HART', 'DCS']),
+      owner: 'Ho Quoc Viet (Me)',
+      priority: 'HIGH',
+      pinned: 1,
+      status: 'ACTIVE',
+      last_reviewed: addDays(-10),
+      next_review: addDays(20),
+      last_opened: formatIso(now),
+      open_count: 14,
+      link_health: 'ACTIVE',
+      notes: 'Contains automated VLOOKUP formulas for junction box terminal assignments.',
+    },
+    {
+      id: 'blt-2',
+      display_name: 'Instrument Working Folder (Network Share)',
+      document_title: 'Network Server Drive: Instrument Working & Calculations',
+      description: 'Top-level network drive containing instrument index, calculation sheets, vendor drawings, and transmittals.',
+      resource_type: 'NETWORK_FOLDER',
+      location: '\\\\ENG-SRV01\\Gallaf-B3\\Instrument\\Working',
+      project_id: 'prj-1',
+      package_id: null,
+      discipline: 'Instrument',
+      tags: JSON.stringify(['NetworkDrive', 'Server', 'Drawings']),
+      owner: 'Tran Minh Duc',
+      priority: 'CRITICAL',
+      pinned: 1,
+      status: 'ACTIVE',
+      last_reviewed: addDays(-5),
+      next_review: addDays(25),
+      last_opened: formatIso(now),
+      open_count: 28,
+      link_health: 'ACTIVE',
+      notes: 'Map network drive Z: for faster access in Windows File Explorer.',
+    },
+    {
+      id: 'blt-3',
+      display_name: 'Local Instrument CAD & Datasheets Repository',
+      document_title: 'Local Drive: Instrument Engineering Scratch & CAD',
+      description: 'Local high-speed SSD working directory for AutoCAD drawings, SmartPlant Instrumentation (SPI) backups, and datasheets.',
+      resource_type: 'LOCAL_FOLDER',
+      location: 'D:\\Projects\\BlockB\\Instrument',
+      project_id: 'prj-1',
+      package_id: null,
+      discipline: 'Instrument',
+      tags: JSON.stringify(['LocalDisk', 'CAD', 'Datasheets']),
+      owner: 'Le Thi Mai',
+      priority: 'NORMAL',
+      pinned: 0,
+      status: 'ACTIVE',
+      last_reviewed: addDays(-40),
+      next_review: addDays(-5), // Review Required!
+      last_opened: formatIso(new Date(Date.now() - 3 * 86400000)),
+      open_count: 9,
+      link_health: 'ACTIVE',
+      notes: 'Weekly robocopy sync script runs every Friday at 17:00 to backup to network server.',
+    },
+    {
+      id: 'blt-4',
+      display_name: 'Project Technical Specification for Control Valves',
+      document_title: 'PTSC-SPEC-INST-004 Rev 02 - General Specification for Control & Choke Valves',
+      description: 'Project mandatory technical requirements for control valve sizing, noise prediction, trim materials, and leakage class.',
+      resource_type: 'SHAREPOINT',
+      location: 'https://ptsc.sharepoint.com/sites/BlockB-EPC/TechnicalSpecs/PTSC-SPEC-INST-004-Rev02.pdf',
+      project_id: 'prj-1',
+      package_id: 'pkg-b01-2',
+      discipline: 'Instrument',
+      tags: JSON.stringify(['Specification', 'Valves', 'Standards']),
+      owner: 'Pham Hoang Nam',
+      priority: 'HIGH',
+      pinned: 1,
+      status: 'ACTIVE',
+      last_reviewed: addDays(-15),
+      next_review: addDays(75),
+      last_opened: formatIso(now),
+      open_count: 19,
+      link_health: 'ACTIVE',
+      notes: 'Clause 4.2 specifies cavitation trim requirements for pressure drop above 50 bar.',
+    },
+    {
+      id: 'blt-5',
+      display_name: 'Emerson Rosemount Vendor Portal & Submittals',
+      document_title: 'Emerson Project Collaboration & Submittal Portal',
+      description: 'Vendor engineering submittal exchange portal for fiscal gas metering skid and Daniel flow computers.',
+      resource_type: 'VENDOR_PORTAL',
+      location: 'https://collaboration.emerson.com/projects/ptsc-block-b-metering',
+      project_id: 'prj-1',
+      package_id: 'pkg-b01-1',
+      discipline: 'Instrument',
+      tags: JSON.stringify(['VendorPortal', 'Emerson', 'Submittals']),
+      owner: 'Tran Minh Duc',
+      priority: 'NORMAL',
+      pinned: 0,
+      status: 'ACTIVE',
+      last_reviewed: addDays(-8),
+      next_review: addDays(14),
+      last_opened: formatIso(new Date(Date.now() - 2 * 86400000)),
+      open_count: 11,
+      link_health: 'ACTIVE',
+      notes: 'Upload comments on TBE and calculation sheets directly via portal.',
+    },
+    {
+      id: 'blt-6',
+      display_name: 'Instrument Index Rev 01 (Superseded Baseline)',
+      document_title: 'Instrument Index Master File – Batch 3 Initial Baseline Rev 01',
+      description: 'Initial engineering baseline index file. Formally superseded by Rev 02 in I/O master list.',
+      resource_type: 'NETWORK_FILE',
+      location: '\\\\ENG-SRV01\\Gallaf-B3\\Instrument\\00-Index\\Instrument_Index_Rev01.xlsx',
+      project_id: 'prj-1',
+      package_id: null,
+      discipline: 'Instrument',
+      tags: JSON.stringify(['Index', 'Superseded', 'Archive']),
+      owner: 'Ho Quoc Viet (Me)',
+      priority: 'LOW',
+      pinned: 0,
+      status: 'SUPERSEDED',
+      replacement_resource_id: 'blt-1',
+      last_reviewed: addDays(-80),
+      next_review: addDays(100),
+      last_opened: formatIso(new Date(Date.now() - 15 * 86400000)),
+      open_count: 3,
+      link_health: 'ACTIVE',
+      notes: 'Superseded. Do not edit this copy. Use blt-1 for active engineering changes.',
+    },
+    {
+      id: 'blt-7',
+      display_name: 'Teams Channel: Multidiscipline Squad Check & Reviews',
+      document_title: 'Microsoft Teams Channel - Block B Engineering Coordination',
+      description: 'Team communication channel for multidisciplinary coordination with Process, Piping, Electrical, and Safety.',
+      resource_type: 'TEAMS',
+      location: 'https://teams.microsoft.com/l/channel/19%3Ainstrument-squad-check%40thread.tacv2/General',
+      project_id: 'prj-1',
+      package_id: null,
+      discipline: 'Instrument',
+      tags: JSON.stringify(['Teams', 'Coordination', 'SquadCheck']),
+      owner: 'Ho Quoc Viet (Me)',
+      priority: 'NORMAL',
+      pinned: 1,
+      status: 'ACTIVE',
+      last_reviewed: addDays(-5),
+      next_review: addDays(30),
+      last_opened: formatIso(now),
+      open_count: 22,
+      link_health: 'ACTIVE',
+      notes: 'Use channel for quick transmittal reviews and meeting link postings.',
+    },
+  ];
+
+  for (const b of bulletinSeeds) {
+    run(`
+      INSERT OR REPLACE INTO bulletin_resources (
+        id, display_name, document_title, description, resource_type, location, project_id, package_id,
+        discipline, tags, owner, priority, pinned, status, last_reviewed, next_review, last_opened,
+        open_count, replacement_resource_id, link_health, notes, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      b.id,
+      b.display_name,
+      b.document_title,
+      b.description,
+      b.resource_type,
+      b.location,
+      b.project_id,
+      b.package_id,
+      b.discipline,
+      b.tags,
+      b.owner,
+      b.priority,
+      b.pinned,
+      b.status,
+      b.last_reviewed,
+      b.next_review,
+      b.last_opened,
+      b.open_count,
+      b.replacement_resource_id || null,
+      b.link_health,
+      b.notes,
+      formatIso(now),
+      formatIso(now),
+    ]);
+  }
+
+  // 9. Link Bulletins to Tasks
+  run('INSERT OR IGNORE INTO task_bulletins (task_id, bulletin_id, created_at) VALUES (?, ?, ?)', ['tsk-b01-101', 'blt-1', formatIso(now)]);
+  run('INSERT OR IGNORE INTO task_bulletins (task_id, bulletin_id, created_at) VALUES (?, ?, ?)', ['tsk-b01-101', 'blt-5', formatIso(now)]);
+  run('INSERT OR IGNORE INTO task_bulletins (task_id, bulletin_id, created_at) VALUES (?, ?, ?)', ['tsk-b01-102', 'blt-4', formatIso(now)]);
+
+  // 10. Seed Bulletin Announcements
+  run(`
+    INSERT OR REPLACE INTO bulletin_announcements (id, title, content, author_id, is_pinned, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `, [
+    'ann-1',
+    'Process C&E Matrix Freeze Notice',
+    'Process team has notified that Cause & Effect matrix working sheet will be frozen for HAZOP review on 08-Oct-2026. All instrument leads please review shutdown alarms.',
+    'usr-1',
+    1,
+    formatIso(now),
+  ]);
+
+  run(`
+    INSERT OR REPLACE INTO bulletin_announcements (id, title, content, author_id, is_pinned, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `, [
+    'ann-2',
+    'Electrical Cable Schedule Rev.03 Released',
+    'Electrical cable schedule updated to Rev.03 on project SharePoint. Instrument & telecom tray loading verification is required by Friday.',
+    'usr-1',
+    0,
+    formatIso(new Date(Date.now() - 24 * 3600000)),
+  ]);
+
+  console.log(`Seeded ${taskSeeds.length} tasks, ${interfaceSeeds.length} interfaces, ${bulletinSeeds.length} bulletin resources, and announcements successfully.`);
 }

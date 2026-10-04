@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Task, TaskPriority, TaskStatus } from '../../types';
+import { Task, TaskPriority, TaskStatus, INTERFACE_DISCIPLINES, DISCIPLINE_COLORS } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { getDeadlineBadge, getScheduleVariance, formatDateDisplay, formatDateDdMmYyyy } from '../../lib/dateUtils';
 import {
@@ -25,6 +25,7 @@ import {
   Users,
   UserCheck,
   Plus,
+  X,
 } from 'lucide-react';
 
 interface TaskListTableProps {
@@ -36,6 +37,7 @@ interface TaskListTableProps {
   onQuickPriorityChange?: (id: string, priority: TaskPriority) => void;
   onQuickProgressChange?: (id: string, progress: number) => void;
   onQuickPicsChange?: (id: string, pics: string[]) => void;
+  onQuickDisciplineChange?: (id: string, discipline: string) => void;
   onDeleteTask?: (id: string) => void;
   onSortChange?: (field: string) => void;
   currentSort?: string;
@@ -56,6 +58,8 @@ interface TaskListTableProps {
   onProgressFilterChange?: (val: string) => void;
   picFilter?: string;
   onPicFilterChange?: (val: string) => void;
+  interfaceFilter?: string;
+  onInterfaceFilterChange?: (val: string) => void;
   onResetColumnFilters?: () => void;
   hideFilterRow?: boolean;
   emptyMessage?: string;
@@ -90,20 +94,20 @@ const InlinePicSelector: React.FC<{
   }, [isOpen]);
 
   const togglePic = (name: string) => {
-    const cleanName = name.replace(/\s*\(Tôi\)\s*$/, '').trim().toLowerCase();
+    const cleanName = name.replace(/\s*\((?:Tôi|Me)\)\s*$/i, '').trim().toLowerCase();
     const isCurrentlySelected = selected.some((s) => {
       if (s === name) return true;
-      return s.replace(/\s*\(Tôi\)\s*$/, '').trim().toLowerCase() === cleanName;
+      return s.replace(/\s*\((?:Tôi|Me)\)\s*$/i, '').trim().toLowerCase() === cleanName;
     });
 
     let next: string[];
     if (isCurrentlySelected) {
       next = selected.filter((s) => {
         if (s === name) return false;
-        return s.replace(/\s*\(Tôi\)\s*$/, '').trim().toLowerCase() !== cleanName;
+        return s.replace(/\s*\((?:Tôi|Me)\)\s*$/i, '').trim().toLowerCase() !== cleanName;
       });
     } else {
-      next = [...selected.filter((s) => s.replace(/\s*\(Tôi\)\s*$/, '').trim().toLowerCase() !== cleanName), name];
+      next = [...selected.filter((s) => s.replace(/\s*\((?:Tôi|Me)\)\s*$/i, '').trim().toLowerCase() !== cleanName), name];
     }
     setSelected(next);
     onCommit(taskId, next);
@@ -120,8 +124,8 @@ const InlinePicSelector: React.FC<{
     } catch (err) {
       console.error('Error creating PIC inline:', err);
     }
-    const cleanName = name.replace(/\s*\(Tôi\)\s*$/, '').trim().toLowerCase();
-    if (!selected.some((s) => s.replace(/\s*\(Tôi\)\s*$/, '').trim().toLowerCase() === cleanName)) {
+    const cleanName = name.replace(/\s*\((?:Tôi|Me)\)\s*$/i, '').trim().toLowerCase();
+    if (!selected.some((s) => s.replace(/\s*\((?:Tôi|Me)\)\s*$/i, '').trim().toLowerCase() === cleanName)) {
       const next = [...selected, name];
       setSelected(next);
       onCommit(taskId, next);
@@ -130,7 +134,7 @@ const InlinePicSelector: React.FC<{
   };
 
   const getInitials = (n: string) => {
-    const clean = n.replace(/\s*\(Tôi\)\s*$/, '').trim();
+    const clean = n.replace(/\s*\((?:Tôi|Me)\)\s*$/i, '').trim();
     const parts = clean.split(/\s+/);
     if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
@@ -149,11 +153,11 @@ const InlinePicSelector: React.FC<{
     // Preserve any custom PIC assigned to this task without duplicating registered members
     for (const p of pics) {
       if (!p) continue;
-      const cleanP = p.replace(/\s*\(Tôi\)\s*$/, '').trim().toLowerCase();
+      const cleanP = p.replace(/\s*\((?:Tôi|Me)\)\s*$/i, '').trim().toLowerCase();
       const alreadyCovered = list.some(
         (existing) =>
           existing.toLowerCase() === p.toLowerCase() ||
-          existing.replace(/\s*\(Tôi\)\s*$/, '').trim().toLowerCase() === cleanP
+          existing.replace(/\s*\((?:Tôi|Me)\)\s*$/i, '').trim().toLowerCase() === cleanP
       );
       if (!alreadyCovered) {
         list.push(p);
@@ -181,7 +185,7 @@ const InlinePicSelector: React.FC<{
           <div className="flex items-center -space-x-1.5 overflow-hidden py-0.5 justify-start">
             {selected.slice(0, 3).map((picName) => {
               const picRecord = registeredPics?.find((m) => m.name.toLowerCase() === picName.toLowerCase());
-              const isMe = picName.includes('Tôi') || picName.includes('Ho Quoc Viet');
+              const isMe = picName.includes('Me') || picName.includes('Tôi') || picName.includes('Ho Quoc Viet');
               if (picRecord?.avatar) {
                 return (
                   <img
@@ -230,13 +234,13 @@ const InlinePicSelector: React.FC<{
 
           <div className="max-h-64 overflow-y-auto space-y-0.5 pr-1 scrollbar-crystal-dark">
             {allAvailableList.map((p) => {
-              const cleanP = p.replace(/\s*\(Tôi\)\s*$/, '').trim().toLowerCase();
+              const cleanP = p.replace(/\s*\((?:Tôi|Me)\)\s*$/i, '').trim().toLowerCase();
               const isChecked = selected.some((s) => {
                 if (s === p) return true;
-                return s.replace(/\s*\(Tôi\)\s*$/, '').trim().toLowerCase() === cleanP;
+                return s.replace(/\s*\((?:Tôi|Me)\)\s*$/i, '').trim().toLowerCase() === cleanP;
               });
               const picRecord = registeredPics?.find((m) => m.name.toLowerCase() === p.toLowerCase());
-              const isMe = p.includes('Tôi') || p.includes('Ho Quoc Viet');
+              const isMe = p.includes('Me') || p.includes('Tôi') || p.includes('Ho Quoc Viet');
               return (
                 <label
                   key={p}
@@ -273,7 +277,7 @@ const InlinePicSelector: React.FC<{
                   </div>
                   {isMe && (
                     <span className="text-[9px] bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 px-1 py-0.2 rounded font-bold shrink-0">
-                      TÔI
+                      ME
                     </span>
                   )}
                 </label>
@@ -313,6 +317,7 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
   onQuickPriorityChange,
   onQuickProgressChange,
   onQuickPicsChange,
+  onQuickDisciplineChange,
   onDeleteTask,
   onSortChange,
   currentSort,
@@ -332,6 +337,8 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
   onProgressFilterChange,
   picFilter = 'ALL',
   onPicFilterChange,
+  interfaceFilter = 'ALL',
+  onInterfaceFilterChange,
   onResetColumnFilters,
   hideFilterRow = false,
   emptyMessage,
@@ -436,6 +443,7 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
     (forecastFilter && forecastFilter !== 'all') ||
     (progressFilter && progressFilter !== 'ALL') ||
     (picFilter && picFilter !== 'ALL') ||
+    (interfaceFilter && interfaceFilter !== 'ALL') ||
     Boolean(filterProjectId) ||
     Boolean(filterPackageId) ||
     Boolean(filterTagId);
@@ -449,6 +457,7 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
     if (onForecastFilterChange) onForecastFilterChange('all');
     if (onProgressFilterChange) onProgressFilterChange('ALL');
     if (onPicFilterChange) onPicFilterChange('ALL');
+    if (onInterfaceFilterChange) onInterfaceFilterChange('ALL');
     setFilterProjectId(null);
     setFilterPackageId(null);
     setFilterTagId(null);
@@ -498,7 +507,7 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
   return (
     <div className="flex-1 min-h-0 flex flex-col w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden shadow-xs transition-colors print:border-none print:shadow-none print:overflow-visible print:bg-white">
       <div className="flex-1 min-h-0 overflow-auto print:overflow-visible">
-        <table className="table-fixed w-full text-left border-separate border-spacing-0 text-xs min-w-[860px] print:min-w-0 print:text-[8pt]">
+        <table className="table-fixed w-full text-left border-separate border-spacing-0 text-xs min-w-[940px] print:min-w-0 print:text-[8pt]">
           <colgroup>
             <col className="w-8" />
             <col className="w-[68px]" />
@@ -506,6 +515,7 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
             <col />
             <col className="w-[126px]" />
             <col className="w-[84px]" />
+            <col className="w-[96px] print:w-20" />
             <col className="w-[82px]" />
             <col className="w-[78px]" />
             <col className="w-[62px]" />
@@ -613,6 +623,23 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
                 </button>
               </th>
 
+              {/* Interface */}
+              <th className="sticky top-0 z-30 bg-slate-100 dark:bg-slate-800 w-[96px] print:w-20 py-2 px-1 text-left align-middle border-b border-slate-200 dark:border-slate-700">
+                <button
+                  type="button"
+                  onClick={() => onSortChange && onSortChange('interface')}
+                  className={`inline-flex items-center space-x-1 transition-colors cursor-pointer hover:text-blue-600 dark:hover:text-blue-400 group text-[11px] text-left ${
+                    currentSort?.startsWith('interface') ? 'text-blue-600 dark:text-blue-400 font-bold' : ''
+                  }`}
+                  title="Sort by Interface Discipline"
+                >
+                  <span>Interface</span>
+                  <ArrowUpDown className={`w-3 h-3 ${
+                    currentSort?.startsWith('interface') ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500 group-hover:text-blue-500'
+                  } print:hidden`} />
+                </button>
+              </th>
+
               {/* Deadline */}
               <th className="sticky top-0 z-30 bg-slate-100 dark:bg-slate-800 w-[82px] print:w-18 py-2 px-1 text-left align-middle border-b border-slate-200 dark:border-slate-700">
                 <button
@@ -715,8 +742,34 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
                 )}
               </th>
 
-              {/* Task Name / Note Filter Box - Empty cell (search is handled globally at the top of the app) */}
-              <th className="sticky top-9 z-20 bg-slate-50 dark:bg-slate-900 py-1 px-2.5 text-left align-middle font-normal border-b border-slate-200 dark:border-slate-800 shadow-2xs" />
+              {/* Task Name / Note Filter Box */}
+              <th className="sticky top-9 z-20 bg-slate-50 dark:bg-slate-900 py-1 px-1.5 text-left align-middle font-normal border-b border-slate-200 dark:border-slate-800 shadow-2xs">
+                <div className="relative flex items-center">
+                  <Search className="w-3 h-3 text-slate-400 absolute left-2 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={searchQuery || ''}
+                    onChange={(e) => onSearchQueryChange && onSearchQueryChange(e.target.value)}
+                    placeholder="Filter name / note..."
+                    aria-label="Filter Task Name"
+                    className={`w-full text-[9.5px] py-0.5 pl-6 pr-5 rounded-md border outline-none font-medium transition-colors shadow-2xs ${
+                      searchQuery
+                        ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-400 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-semibold'
+                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600 focus:border-blue-500'
+                    }`}
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => onSearchQueryChange && onSearchQueryChange('')}
+                      className="absolute right-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                      title="Clear task name filter"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  )}
+                </div>
+              </th>
 
               {/* Project / Package Filter Box */}
               <th className="sticky top-9 z-20 bg-slate-50 dark:bg-slate-900 w-[126px] py-1 px-0.5 text-left align-middle font-normal border-b border-slate-200 dark:border-slate-800 shadow-2xs">
@@ -795,6 +848,33 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
                 ) : (
                   <div className="text-[10px] text-slate-400 dark:text-slate-500 text-left py-0.5 font-mono">
                     PIC
+                  </div>
+                )}
+              </th>
+
+              {/* Interface Filter Box */}
+              <th className="sticky top-9 z-20 bg-slate-50 dark:bg-slate-900 w-[96px] py-1 px-0.5 text-left align-middle font-normal border-b border-slate-200 dark:border-slate-800 shadow-2xs">
+                {onInterfaceFilterChange ? (
+                  <select
+                    value={interfaceFilter}
+                    onChange={(e) => onInterfaceFilterChange(e.target.value)}
+                    aria-label="Filter Interface"
+                    className={`w-full text-[9px] py-0.5 px-0.5 rounded-md border outline-none font-medium transition-colors shadow-2xs cursor-pointer ${
+                      interfaceFilter !== 'ALL'
+                        ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-400 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-semibold'
+                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600 focus:border-blue-500'
+                    }`}
+                  >
+                    <option value="ALL">All Disciplines</option>
+                    {INTERFACE_DISCIPLINES.map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="text-[9px] text-slate-400 dark:text-slate-500 text-left py-0.5 font-mono">
+                    Itf
                   </div>
                 )}
               </th>
@@ -1146,6 +1226,49 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
                       </div>
                       <span className="hidden print:inline-block font-mono text-[7.5pt] text-slate-600 text-left">
                         {Array.isArray(task.pics) && task.pics.length > 0 ? task.pics.join(', ') : '-'}
+                      </span>
+                    </td>
+
+                    {/* Interface Discipline Selector (Click to switch on the fly) */}
+                    <td className={`py-2 px-1 text-left align-top ${getCellBorderClass('middle')}`}>
+                      {(() => {
+                        const currentDiscipline =
+                          task.interfaces && task.interfaces.length > 0 && task.interfaces[0].discipline
+                            ? task.interfaces[0].discipline
+                            : 'Instrument';
+                        const color = DISCIPLINE_COLORS[currentDiscipline] || DISCIPLINE_COLORS.Other;
+                        return (
+                          <div className="print:hidden">
+                            <select
+                              value={currentDiscipline}
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={(e) => {
+                                const newDisc = e.target.value;
+                                if (onQuickDisciplineChange) {
+                                  onQuickDisciplineChange(task.id, newDisc);
+                                }
+                              }}
+                              title={`Interface Discipline: ${currentDiscipline} (Click to switch)`}
+                              aria-label={`Change discipline for task ${task.title}`}
+                              className={`w-full h-4.5 text-[8.5px] py-0 px-0.5 rounded border font-mono font-medium outline-none cursor-pointer truncate max-w-full text-center ${
+                                isCancelled || isDone
+                                  ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700'
+                                  : `${color.bg} ${color.text} ${color.border}`
+                              }`}
+                            >
+                              {INTERFACE_DISCIPLINES.map((d) => (
+                                <option key={d} value={d}>
+                                  {d}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        );
+                      })()}
+                      <span className="hidden print:inline-block font-mono text-[7.5pt] text-slate-600">
+                        {task.interfaces && task.interfaces.length > 0
+                          ? task.interfaces.map((i) => i.discipline).join(', ')
+                          : 'Instrument'}
                       </span>
                     </td>
 
