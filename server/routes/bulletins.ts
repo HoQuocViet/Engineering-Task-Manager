@@ -291,6 +291,39 @@ router.get('/', (req: Request, res: Response) => {
       "SELECT COUNT(*) as cnt FROM bulletin_resources WHERE status = 'ACTIVE' AND last_opened IS NOT NULL"
     )?.cnt || 0;
 
+    // Quick filter tab counts (ALL, PINNED, SHEETS, DOCS, SHAREPOINT, TEAMS, WEB, FOLDERS, FILES)
+    const baseStatus = status && status !== 'ALL' ? status : 'ACTIVE';
+    const projFilter = projectId && projectId !== 'ALL' ? String(projectId) : null;
+    const pkgFilter = packageId && packageId !== 'ALL' ? String(packageId) : null;
+
+    let baseFilterSql = 'status = ?';
+    const baseParams: any[] = [baseStatus];
+    if (projFilter) {
+      baseFilterSql += ' AND project_id = ?';
+      baseParams.push(projFilter);
+    }
+    if (pkgFilter) {
+      baseFilterSql += ' AND package_id = ?';
+      baseParams.push(pkgFilter);
+    }
+    const discFilter = discipline && discipline !== 'ALL' && String(discipline).trim() ? String(discipline).trim() : null;
+    if (discFilter) {
+      baseFilterSql += ' AND (discipline = ? OR VI_MATCH(discipline, ?) = 1)';
+      baseParams.push(discFilter, discFilter);
+    }
+
+    const tabCounts: Record<string, number> = {
+      ALL: queryOne<{ cnt: number }>(`SELECT COUNT(*) as cnt FROM bulletin_resources WHERE ${baseFilterSql}`, baseParams)?.cnt || 0,
+      PINNED: queryOne<{ cnt: number }>(`SELECT COUNT(*) as cnt FROM bulletin_resources WHERE ${baseFilterSql} AND pinned = 1`, baseParams)?.cnt || 0,
+      SHEETS: queryOne<{ cnt: number }>(`SELECT COUNT(*) as cnt FROM bulletin_resources WHERE ${baseFilterSql} AND resource_type = 'GOOGLE_SHEET'`, baseParams)?.cnt || 0,
+      DOCS: queryOne<{ cnt: number }>(`SELECT COUNT(*) as cnt FROM bulletin_resources WHERE ${baseFilterSql} AND resource_type = 'GOOGLE_DOCS'`, baseParams)?.cnt || 0,
+      SHAREPOINT: queryOne<{ cnt: number }>(`SELECT COUNT(*) as cnt FROM bulletin_resources WHERE ${baseFilterSql} AND resource_type = 'SHAREPOINT'`, baseParams)?.cnt || 0,
+      TEAMS: queryOne<{ cnt: number }>(`SELECT COUNT(*) as cnt FROM bulletin_resources WHERE ${baseFilterSql} AND resource_type = 'TEAMS'`, baseParams)?.cnt || 0,
+      WEB: queryOne<{ cnt: number }>(`SELECT COUNT(*) as cnt FROM bulletin_resources WHERE ${baseFilterSql} AND resource_type IN ('WEB_URL', 'VENDOR_PORTAL')`, baseParams)?.cnt || 0,
+      FOLDERS: queryOne<{ cnt: number }>(`SELECT COUNT(*) as cnt FROM bulletin_resources WHERE ${baseFilterSql} AND resource_type IN ('NETWORK_FOLDER', 'LOCAL_FOLDER')`, baseParams)?.cnt || 0,
+      FILES: queryOne<{ cnt: number }>(`SELECT COUNT(*) as cnt FROM bulletin_resources WHERE ${baseFilterSql} AND resource_type IN ('NETWORK_FILE', 'LOCAL_FILE')`, baseParams)?.cnt || 0,
+    };
+
     res.json({
       resources,
       total,
@@ -299,6 +332,7 @@ router.get('/', (req: Request, res: Response) => {
       pinnedCount,
       reviewRequiredCount,
       recentCount,
+      tabCounts,
     });
   } catch (err: any) {
     console.error('Error listing bulletins:', err);

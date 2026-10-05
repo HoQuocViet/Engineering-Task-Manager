@@ -550,6 +550,31 @@ export const api = {
     return handleResponse(res);
   },
 
+  createMeeting: async (data: Partial<OutlookEvent>): Promise<{ success: boolean; event: OutlookEvent }> => {
+    const res = await fetch('/api/outlook/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(res);
+  },
+
+  updateMeeting: async (id: string, data: Partial<OutlookEvent>): Promise<{ success: boolean; event: OutlookEvent }> => {
+    const res = await fetch(`/api/outlook/events/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return handleResponse(res);
+  },
+
+  deleteMeeting: async (id: string): Promise<{ success: boolean; message: string }> => {
+    const res = await fetch(`/api/outlook/events/${id}`, {
+      method: 'DELETE',
+    });
+    return handleResponse(res);
+  },
+
   syncOutlookCalendar: async (): Promise<{ success: boolean; count: number; last_synced_at: string }> => {
     const res = await fetch('/api/outlook/sync', { method: 'POST' });
     return handleResponse(res);
@@ -576,6 +601,7 @@ export const api = {
     pinnedCount: number;
     recentCount: number;
     reviewRequiredCount: number;
+    tabCounts?: Record<string, number>;
   }> => {
     const params = new URLSearchParams();
     if (filters.search) params.set('search', filters.search);

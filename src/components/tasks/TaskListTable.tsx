@@ -1242,7 +1242,10 @@ export const TaskListTable: React.FC<TaskListTableProps> = ({
                             <select
                               value={currentDiscipline}
                               onClick={(e) => e.stopPropagation()}
+                              onDoubleClick={(e) => e.stopPropagation()}
+                              onKeyDown={(e) => e.stopPropagation()}
                               onChange={(e) => {
+                                e.stopPropagation();
                                 const newDisc = e.target.value;
                                 if (onQuickDisciplineChange) {
                                   onQuickDisciplineChange(task.id, newDisc);

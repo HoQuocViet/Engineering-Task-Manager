@@ -49,8 +49,16 @@ import {
   Users,
   UserCheck,
   Inbox,
+  FileSpreadsheet,
+  Printer,
+  Hourglass,
+  Plus,
+  RotateCcw,
 } from 'lucide-react';
 import { UserAvatar } from '../components/UserAvatar';
+import { BatchActionBar } from '../components/tasks/BatchActionBar';
+import { PrintPreviewModal } from '../components/tasks/PrintPreviewModal';
+import { exportTasksToExcel } from '../lib/excelExport';
 import { formatDateDisplay, formatShortDate, formatDateDdMmYyyy, getDeadlineBadge, getScheduleVariance } from '../lib/dateUtils';
 
 const DISCIPLINE_COLORS: Record<string, { bg: string; text: string; border: string }> = {
@@ -102,6 +110,8 @@ const formatActivityTimestamp = (dateStr?: string | null) => {
 export const DashboardView: React.FC = () => {
   const {
     projects,
+    packages,
+    categories,
     currentUser,
     filterProjectId,
     setFilterProjectId,
@@ -116,6 +126,7 @@ export const DashboardView: React.FC = () => {
     refreshData,
     showToast,
     workspaceBranding,
+    openNewTaskModal,
   } = useApp();
 
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -132,6 +143,10 @@ export const DashboardView: React.FC = () => {
   const [dashboardDeadlineFilter, setDashboardDeadlineFilter] = useState<string>('all');
   const [dashboardForecastFilter, setDashboardForecastFilter] = useState<string>('all');
   const [dashboardProgressFilter, setDashboardProgressFilter] = useState('ALL');
+  const [dashboardPicFilter, setDashboardPicFilter] = useState('ALL');
+  const [dashboardInterfaceFilter, setDashboardInterfaceFilter] = useState('ALL');
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Task delete confirmation modal state
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
@@ -271,26 +286,98 @@ export const DashboardView: React.FC = () => {
     }
   };
 
-  const handleQuickDisciplineChange = async (taskId: string, newDiscipline: string) => {
+  const handleQuickPicsChange = async (taskId: string, newPics: string[]) => {
+    setStats((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        urgentTasks: prev.urgentTasks.map((t) =>
+          t.id === taskId ? { ...t, pics: newPics } : t
+        ),
+      };
+    });
     try {
-      const currentTask = (stats?.urgentTasks || []).find((t) => t.id === taskId);
-      const existingItf = currentTask?.interfaces?.[0];
-      if (existingItf) {
-        await api.updateInterface(existingItf.id, {
+      await api.updateTask(taskId, {
+        pics: newPics,
+        userId: currentUser?.id,
+      });
+      showToast('Updated Person In Charge (PIC)');
+    } catch (err: any) {
+      showToast(`Failed to update PIC: ${err.message}`);
+      fetchStats();
+    }
+  };
+
+  const handleQuickDisciplineChange = async (taskId: string, newDiscipline: string) => {
+    const currentTask = (stats?.urgentTasks || []).find((t) => t.id === taskId);
+    const existingItf = currentTask?.interfaces?.[0];
+
+    // Optimistic local state update
+    setStats((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        urgentTasks: prev.urgentTasks.map((t) => {
+          if (t.id !== taskId) return t;
+          const currentInterfaces = t.interfaces && t.interfaces.length > 0 ? [...t.interfaces] : [];
+          if (currentInterfaces.length > 0) {
+            currentInterfaces[0] = { ...currentInterfaces[0], discipline: newDiscipline as any };
+          } else {
+            currentInterfaces.push({
+              id: `temp-${Date.now()}`,
+              task_id: taskId,
+              discipline: newDiscipline as any,
+              action: `Discipline scope: ${newDiscipline}`,
+              status: 'OPEN',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            });
+          }
+          return { ...t, interfaces: currentInterfaces };
+        }),
+      };
+    });
+
+    try {
+      if (existingItf && !existingItf.id.startsWith('temp-')) {
+        const updated = await api.updateInterface(existingItf.id, {
           discipline: newDiscipline as any,
           userId: currentUser?.id,
         });
+        setStats((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            urgentTasks: prev.urgentTasks.map((t) => {
+              if (t.id !== taskId) return t;
+              const ifaces = t.interfaces && t.interfaces.length > 0 ? [...t.interfaces] : [];
+              if (ifaces.length > 0) {
+                ifaces[0] = { ...ifaces[0], ...updated, discipline: newDiscipline as any };
+              }
+              return { ...t, interfaces: ifaces };
+            }),
+          };
+        });
       } else {
-        await api.createInterface({
+        const created = await api.createInterface({
           task_id: taskId,
           discipline: newDiscipline as any,
           action: `Discipline scope: ${newDiscipline}`,
           status: 'OPEN',
           userId: currentUser?.id,
         });
+        setStats((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            urgentTasks: prev.urgentTasks.map((t) => {
+              if (t.id !== taskId) return t;
+              return { ...t, interfaces: [created] };
+            }),
+          };
+        });
       }
-      showToast(`✅ Discipline updated to ${newDiscipline}`);
-      fetchStats();
+      showToast(`Discipline updated to ${newDiscipline}`);
     } catch (err: any) {
       showToast(`Failed to update discipline: ${err.message}`);
     }
@@ -337,10 +424,55 @@ export const DashboardView: React.FC = () => {
     setDashboardDeadlineFilter('all');
     setDashboardForecastFilter('all');
     setDashboardProgressFilter('ALL');
+    setDashboardPicFilter('ALL');
+    setDashboardInterfaceFilter('ALL');
     setDashboardSort('created_desc');
     setFilterProjectId(null);
     setFilterPackageId(null);
     setFilterTagId(null);
+  };
+
+  const hasActiveDashboardFilters =
+    dashboardStatusFilter !== 'ALL' ||
+    dashboardPriorityFilter !== 'ALL' ||
+    filterProjectId !== null ||
+    filterPackageId !== null ||
+    dashboardCategoryFilter !== 'ALL' ||
+    filterTagId !== null ||
+    dashboardPicFilter !== 'ALL' ||
+    dashboardInterfaceFilter !== 'ALL' ||
+    dashboardDeadlineFilter !== 'all' ||
+    dashboardForecastFilter !== 'all' ||
+    dashboardProgressFilter !== 'ALL' ||
+    dashboardSearchQuery !== '';
+
+  const handleExportExcel = () => {
+    if (displayUrgentTasks.length === 0) {
+      showToast('No tasks to export');
+      return;
+    }
+    setIsExporting(true);
+    try {
+      const activeProj = projects.find((p) => p.id === filterProjectId);
+      const activePkg = packages?.find((p) => p.id === filterPackageId);
+      exportTasksToExcel(displayUrgentTasks, {
+        projectName: activeProj?.code || activeProj?.name,
+        packageName: activePkg?.code || activePkg?.name,
+      });
+      showToast(`✅ Successfully exported ${displayUrgentTasks.length} critical focus tasks to Excel`);
+    } catch (err: any) {
+      showToast(`❌ Export failed: ${err.message}`);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handlePrint = () => {
+    if (displayUrgentTasks.length === 0) {
+      showToast('No tasks to print');
+      return;
+    }
+    setIsPrintModalOpen(true);
   };
 
   const displayUrgentTasks = useMemo(() => {
@@ -459,6 +591,30 @@ export const DashboardView: React.FC = () => {
       }
     }
 
+    // PIC filter
+    if (dashboardPicFilter && dashboardPicFilter !== 'ALL') {
+      if (dashboardPicFilter === 'UNASSIGNED') {
+        list = list.filter((t) => !t.pics || t.pics.length === 0);
+      } else {
+        const cleanPic = dashboardPicFilter.replace(/\s*\((?:Tôi|Me)\)\s*$/i, '').trim().toLowerCase();
+        list = list.filter((t) => {
+          if (!t.pics || !Array.isArray(t.pics)) return false;
+          return t.pics.some((p) => {
+            const cleanP = p.replace(/\s*\((?:Tôi|Me)\)\s*$/i, '').trim().toLowerCase();
+            return cleanP === cleanPic || p.toLowerCase() === dashboardPicFilter.toLowerCase();
+          });
+        });
+      }
+    }
+
+    // Interface Discipline filter
+    if (dashboardInterfaceFilter && dashboardInterfaceFilter !== 'ALL') {
+      list = list.filter((t) => {
+        const disc = t.interfaces && t.interfaces.length > 0 ? t.interfaces[0].discipline : 'Instrument';
+        return disc === dashboardInterfaceFilter;
+      });
+    }
+
     // Sort order (default: created_desc)
     list.sort((a, b) => {
       if (dashboardSort === 'created_desc') return (b.created_at || '').localeCompare(a.created_at || '');
@@ -483,6 +639,16 @@ export const DashboardView: React.FC = () => {
       if (dashboardSort === 'forecast_desc') return (b.forecast_finish || '').localeCompare(a.forecast_finish || '');
       if (dashboardSort === 'package' || dashboardSort === 'package_asc') return (a.package_code || '').localeCompare(b.package_code || '');
       if (dashboardSort === 'package_desc') return (b.package_code || '').localeCompare(a.package_code || '');
+      if (dashboardSort === 'pic' || dashboardSort === 'pic_asc') {
+        const aPic = Array.isArray(a.pics) && a.pics.length > 0 ? a.pics.join(', ') : '';
+        const bPic = Array.isArray(b.pics) && b.pics.length > 0 ? b.pics.join(', ') : '';
+        return aPic.localeCompare(bPic);
+      }
+      if (dashboardSort === 'pic_desc') {
+        const aPic = Array.isArray(a.pics) && a.pics.length > 0 ? a.pics.join(', ') : '';
+        const bPic = Array.isArray(b.pics) && b.pics.length > 0 ? b.pics.join(', ') : '';
+        return bPic.localeCompare(aPic);
+      }
       if (dashboardSort === 'interface' || dashboardSort === 'interface_asc') {
         const aItf = (a.interfaces && a.interfaces[0]?.discipline) || 'Instrument';
         const bItf = (b.interfaces && b.interfaces[0]?.discipline) || 'Instrument';
@@ -506,6 +672,8 @@ export const DashboardView: React.FC = () => {
     dashboardDeadlineFilter,
     dashboardForecastFilter,
     dashboardProgressFilter,
+    dashboardPicFilter,
+    dashboardInterfaceFilter,
     filterProjectId,
     filterPackageId,
     filterTagId,
@@ -1391,28 +1559,311 @@ export const DashboardView: React.FC = () => {
 
       {/* Row: Critical Focus Items */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 sm:p-5 shadow-xs flex flex-col space-y-3 transition-colors">
-        <div className="flex items-center justify-between">
+        {/* Section Header & Action Controls */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           <div className="flex items-center space-x-2">
             <span className="px-2 py-0.5 rounded-md bg-[#0b3b70] dark:bg-blue-900 text-white font-mono text-xs font-bold shadow-2xs">03</span>
             <Flame className="w-4 h-4 text-rose-600 animate-pulse" />
-            <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wide">
-              Critical Focus Items ({stats?.urgentTasks?.length || 0})
+            <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wide">
+              Critical Focus Items
             </h3>
-            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
-              (Single-click to select, double-click to open)
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300 font-bold border border-blue-200 dark:border-blue-800">
+              {displayUrgentTasks.length} Tasks
+            </span>
+            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono hidden lg:inline">
+              (Single-click select, double-click open)
             </span>
           </div>
+
+          <div className="flex items-center flex-wrap gap-2">
+            {/* New Task Button */}
+            <button
+              type="button"
+              onClick={() => openNewTaskModal()}
+              className="bg-blue-650 hover:bg-blue-700 active:bg-blue-800 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center space-x-1 shadow-sm transition-colors cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span>New Task</span>
+            </button>
+
+            {/* Export Excel Button */}
+            <button
+              type="button"
+              onClick={handleExportExcel}
+              disabled={isExporting || displayUrgentTasks.length === 0}
+              className="bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg flex items-center space-x-1.5 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+              title="Export critical focus tasks to Excel (.xlsx)"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              <span>{isExporting ? 'Exporting...' : 'Export Excel'}</span>
+            </button>
+
+            {/* Print Button */}
+            <button
+              type="button"
+              onClick={handlePrint}
+              disabled={displayUrgentTasks.length === 0}
+              className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-semibold px-2.5 py-1.5 rounded-lg flex items-center space-x-1.5 shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+              title="Print critical focus items"
+            >
+              <Printer className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
+              <span>Print List</span>
+            </button>
+
+            {/* Reset Filters button if active */}
+            {hasActiveDashboardFilters && (
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="text-xs px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 rounded-lg font-semibold flex items-center space-x-1 transition-colors cursor-pointer"
+                title="Clear all active column & toolbar filters"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>Reset Filters</span>
+              </button>
+            )}
+
+            {/* View All Tasks Link */}
+            <button
+              type="button"
+              onClick={() => setActiveView('tasks')}
+              className="text-xs text-[#0b3b70] dark:text-sky-400 hover:underline flex items-center space-x-0.5 font-semibold cursor-pointer pl-1"
+            >
+              <span>View All Tasks</span>
+              <ArrowUpRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
+        {/* 5 Quick Filter Cards (Pills) - Synchronized with Task List View */}
+        <div className="no-print grid grid-cols-2 sm:grid-cols-5 gap-2 shrink-0">
+          {/* 1. All Items */}
           <button
-            onClick={() => setActiveView('tasks')}
-            className="text-[11px] text-[#0b3b70] dark:text-sky-400 hover:underline flex items-center space-x-0.5 font-semibold cursor-pointer"
+            type="button"
+            onClick={() => {
+              setDashboardStatusFilter('ALL');
+              setDashboardDeadlineFilter('all');
+            }}
+            className={`p-2 rounded-xl border transition-all text-left flex items-center justify-between cursor-pointer ${
+              dashboardStatusFilter === 'ALL' && dashboardDeadlineFilter === 'all'
+                ? 'bg-blue-50 dark:bg-blue-950/70 border-blue-400 dark:border-blue-600 ring-2 ring-blue-500/20 shadow-xs'
+                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-blue-300 dark:hover:border-blue-800'
+            }`}
           >
-            <span>View All Tasks</span>
-            <ArrowUpRight className="w-3 h-3" />
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                <Layers className="w-3 h-3 text-blue-600" />
+                <span>All Items</span>
+              </span>
+              <span className="text-sm font-bold font-mono text-slate-900 dark:text-slate-100 block mt-0.5">
+                {stats?.urgentTasks ? stats.urgentTasks.length : 0}
+              </span>
+            </div>
+            <span className="text-[10px] font-mono text-blue-600 font-semibold">ALL</span>
+          </button>
+
+          {/* 2. In Progress */}
+          <button
+            type="button"
+            onClick={() => {
+              setDashboardStatusFilter('IN PROGRESS');
+              setDashboardDeadlineFilter('all');
+            }}
+            className={`p-2 rounded-xl border transition-all text-left flex items-center justify-between cursor-pointer ${
+              dashboardStatusFilter === 'IN PROGRESS'
+                ? 'bg-blue-50 dark:bg-blue-950/70 border-blue-400 dark:border-blue-600 ring-2 ring-blue-500/20 shadow-xs'
+                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-blue-300 dark:hover:border-blue-800'
+            }`}
+          >
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-300 flex items-center gap-1">
+                <Activity className="w-3 h-3 text-blue-600" />
+                <span>In Progress</span>
+              </span>
+              <span className="text-sm font-bold font-mono text-blue-800 dark:text-blue-200 block mt-0.5">
+                {(stats?.urgentTasks || []).filter((t) => t.status === 'IN PROGRESS').length}
+              </span>
+            </div>
+            <span className="text-[10px] font-mono text-blue-600/70 font-semibold">ACTIVE</span>
+          </button>
+
+          {/* 3. Waiting / Review */}
+          <button
+            type="button"
+            onClick={() => {
+              setDashboardStatusFilter('WAITING');
+              setDashboardDeadlineFilter('all');
+            }}
+            className={`p-2 rounded-xl border transition-all text-left flex items-center justify-between cursor-pointer ${
+              dashboardStatusFilter === 'WAITING'
+                ? 'bg-amber-50 dark:bg-amber-950/70 border-amber-300 dark:border-amber-700 ring-2 ring-amber-500/20 shadow-xs'
+                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-amber-300 dark:hover:border-amber-800'
+            }`}
+          >
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                <Hourglass className="w-3 h-3 text-amber-500" />
+                <span>Waiting / Review</span>
+              </span>
+              <span className="text-sm font-bold font-mono text-amber-700 dark:text-amber-300 block mt-0.5">
+                {(stats?.urgentTasks || []).filter((t) => t.status === 'WAITING' || t.status === 'ON HOLD').length}
+              </span>
+            </div>
+            <span className="text-[10px] font-mono text-amber-600/70 font-semibold">HOLD</span>
+          </button>
+
+          {/* 4. Overdue Critical Focus */}
+          <button
+            type="button"
+            onClick={() => {
+              setDashboardDeadlineFilter('overdue');
+              setDashboardStatusFilter('ALL');
+            }}
+            className={`p-2 rounded-xl border transition-all text-left flex items-center justify-between cursor-pointer ${
+              dashboardDeadlineFilter === 'overdue'
+                ? 'bg-rose-50 dark:bg-rose-950/70 border-rose-300 dark:border-rose-700 ring-2 ring-rose-500/20 shadow-xs'
+                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-rose-300 dark:hover:border-rose-800'
+            }`}
+          >
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-rose-700 dark:text-rose-400 flex items-center gap-1">
+                <Flame className={`w-3 h-3 text-rose-600 ${
+                  (stats?.urgentTasks || []).filter((t) => {
+                    if (t.status === 'DONE' || t.status === 'CANCELLED') return false;
+                    const d = t.forecast_finish || t.deadline;
+                    if (!d) return false;
+                    return new Date(d) < new Date(new Date().setHours(0, 0, 0, 0));
+                  }).length > 0 ? 'animate-pulse' : ''
+                }`} />
+                <span>Overdue Items</span>
+              </span>
+              <span className="text-sm font-bold font-mono text-rose-600 dark:text-rose-400 block mt-0.5">
+                {(stats?.urgentTasks || []).filter((t) => {
+                  if (t.status === 'DONE' || t.status === 'CANCELLED') return false;
+                  const d = t.forecast_finish || t.deadline;
+                  if (!d) return false;
+                  return new Date(d) < new Date(new Date().setHours(0, 0, 0, 0));
+                }).length}
+              </span>
+            </div>
+            {(stats?.urgentTasks || []).filter((t) => {
+              if (t.status === 'DONE' || t.status === 'CANCELLED') return false;
+              const d = t.forecast_finish || t.deadline;
+              if (!d) return false;
+              return new Date(d) < new Date(new Date().setHours(0, 0, 0, 0));
+            }).length > 0 ? (
+              <span className="text-[9px] font-bold bg-rose-600 text-white px-1.5 py-0.5 rounded-full animate-bounce">
+                ALERT
+              </span>
+            ) : (
+              <span className="text-[10px] font-mono text-emerald-600 font-semibold">CLEAN</span>
+            )}
+          </button>
+
+          {/* 5. Done Completed */}
+          <button
+            type="button"
+            onClick={() => {
+              setDashboardStatusFilter('DONE');
+              setDashboardDeadlineFilter('all');
+            }}
+            className={`p-2 rounded-xl border transition-all text-left flex items-center justify-between cursor-pointer col-span-2 sm:col-span-1 ${
+              dashboardStatusFilter === 'DONE'
+                ? 'bg-emerald-50 dark:bg-emerald-950/70 border-emerald-300 dark:border-emerald-700 ring-2 ring-emerald-500/20 shadow-xs'
+                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-emerald-300 dark:hover:border-emerald-800'
+            }`}
+          >
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                <span>Completed</span>
+              </span>
+              <span className="text-sm font-bold font-mono text-emerald-700 dark:text-emerald-300 block mt-0.5">
+                {(stats?.urgentTasks || []).filter((t) => t.status === 'DONE').length}
+              </span>
+            </div>
+            <span className="text-[10px] font-mono text-emerald-600 font-semibold">DONE</span>
           </button>
         </div>
 
+        {/* Filter Toolbar (Aligned with Task List view) */}
+        <div className="no-print shrink-0 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 shadow-xs transition-colors">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Search box */}
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={dashboardSearchQuery}
+                onChange={(e) => setDashboardSearchQuery(e.target.value)}
+                placeholder="Search scope, title, description..."
+                className="w-full text-xs pl-8 pr-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded outline-none focus:border-blue-600"
+              />
+            </div>
+
+            {/* Quick Filter Buttons (Royal Blue Dominant) */}
+            <div className="flex items-center space-x-1 overflow-x-auto text-xs font-medium">
+              <button
+                type="button"
+                onClick={() => setDashboardDeadlineFilter('all')}
+                className={`px-2.5 py-1 rounded transition-colors cursor-pointer ${
+                  dashboardDeadlineFilter === 'all'
+                    ? 'bg-blue-600 text-white font-semibold'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                }`}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                onClick={() => setDashboardDeadlineFilter('today')}
+                className={`px-2.5 py-1 rounded transition-colors cursor-pointer ${
+                  dashboardDeadlineFilter === 'today'
+                    ? 'bg-amber-600 text-white font-bold'
+                    : 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 hover:bg-amber-100'
+                }`}
+              >
+                Due Today
+              </button>
+              <button
+                type="button"
+                onClick={() => setDashboardDeadlineFilter('overdue')}
+                className={`px-2.5 py-1 rounded transition-colors cursor-pointer ${
+                  dashboardDeadlineFilter === 'overdue'
+                    ? 'bg-rose-600 text-white font-bold'
+                    : 'bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 hover:bg-rose-100'
+                }`}
+              >
+                Overdue
+              </button>
+              <button
+                type="button"
+                onClick={() => setDashboardDeadlineFilter('this_week')}
+                className={`px-2.5 py-1 rounded transition-colors cursor-pointer ${
+                  dashboardDeadlineFilter === 'this_week'
+                    ? 'bg-blue-600 text-white font-bold'
+                    : 'bg-blue-50 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 hover:bg-blue-100'
+                }`}
+              >
+                This Week
+              </button>
+              <button
+                type="button"
+                onClick={() => setDashboardDeadlineFilter('done')}
+                className={`px-2.5 py-1 rounded transition-colors cursor-pointer ${
+                  dashboardDeadlineFilter === 'done'
+                    ? 'bg-emerald-600 text-white font-bold'
+                    : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100'
+                }`}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* Task List Table (Same unified component as Task List view) */}
-        <div className="min-h-[260px] max-h-[480px] flex flex-col">
+        <div className="min-h-[280px] max-h-[520px] flex flex-col">
           <TaskListTable
             tasks={displayUrgentTasks}
             selectedTaskIds={dashboardSelectedTaskIds}
@@ -1421,6 +1872,7 @@ export const DashboardView: React.FC = () => {
             onQuickStatusChange={handleQuickStatusChange}
             onQuickPriorityChange={handleQuickPriorityChange}
             onQuickProgressChange={handleQuickProgressChange}
+            onQuickPicsChange={handleQuickPicsChange}
             onQuickDisciplineChange={handleQuickDisciplineChange}
             onDeleteTask={handleDeleteTask}
             onSortChange={handleSortToggle}
@@ -1439,8 +1891,12 @@ export const DashboardView: React.FC = () => {
             onForecastFilterChange={setDashboardForecastFilter}
             progressFilter={dashboardProgressFilter}
             onProgressFilterChange={setDashboardProgressFilter}
+            picFilter={dashboardPicFilter}
+            onPicFilterChange={setDashboardPicFilter}
+            interfaceFilter={dashboardInterfaceFilter}
+            onInterfaceFilterChange={setDashboardInterfaceFilter}
             onResetColumnFilters={handleResetFilters}
-            emptyMessage="No critical focus items pending. Great work!"
+            emptyMessage="No critical focus items match your current filters."
           />
         </div>
       </div>
@@ -1733,6 +2189,37 @@ export const DashboardView: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Floating Batch Operations Bar */}
+      <BatchActionBar
+        selectedTaskIds={dashboardSelectedTaskIds}
+        tasks={displayUrgentTasks}
+        onClearSelection={() => setDashboardSelectedTaskIds([])}
+        onUpdated={() => {
+          fetchStats();
+          refreshData();
+        }}
+      />
+
+      {/* Print Preview & Direct Print Modal */}
+      <PrintPreviewModal
+        isOpen={isPrintModalOpen}
+        onClose={() => setIsPrintModalOpen(false)}
+        tasks={displayUrgentTasks}
+        filterInfo={{
+          projectName: projects.find((p) => p.id === filterProjectId)?.name,
+          packageName: packages?.find((p) => p.id === filterPackageId)?.name,
+          status: dashboardStatusFilter !== 'ALL' ? dashboardStatusFilter : undefined,
+          priority: dashboardPriorityFilter !== 'ALL' ? dashboardPriorityFilter : undefined,
+          category: categories?.find((c) => c.id === dashboardCategoryFilter)?.name,
+          searchQuery: dashboardSearchQuery || undefined,
+          pic: dashboardPicFilter !== 'ALL' ? dashboardPicFilter : undefined,
+          interface: dashboardInterfaceFilter !== 'ALL' ? dashboardInterfaceFilter : undefined,
+        }}
+        workspaceBranding={workspaceBranding}
+        projects={projects}
+        packages={packages || []}
+      />
     </div>
   );
 };

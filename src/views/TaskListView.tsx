@@ -289,25 +289,39 @@ export const TaskListView: React.FC = () => {
     );
 
     try {
-      if (existingItf) {
-        await api.updateInterface(existingItf.id, {
+      if (existingItf && !existingItf.id.startsWith('temp-')) {
+        const updated = await api.updateInterface(existingItf.id, {
           discipline: newDiscipline as any,
           userId: currentUser?.id,
         });
+        setTasks((prev) =>
+          prev.map((t) => {
+            if (t.id !== taskId) return t;
+            const ifaces = t.interfaces && t.interfaces.length > 0 ? [...t.interfaces] : [];
+            if (ifaces.length > 0) {
+              ifaces[0] = { ...ifaces[0], ...updated, discipline: newDiscipline as any };
+            }
+            return { ...t, interfaces: ifaces };
+          })
+        );
       } else {
-        await api.createInterface({
+        const created = await api.createInterface({
           task_id: taskId,
           discipline: newDiscipline as any,
           action: `Discipline scope: ${newDiscipline}`,
           status: 'OPEN',
           userId: currentUser?.id,
         });
+        setTasks((prev) =>
+          prev.map((t) => {
+            if (t.id !== taskId) return t;
+            return { ...t, interfaces: [created] };
+          })
+        );
       }
-      showToast(`✅ Discipline updated to ${newDiscipline}`);
-      refreshData();
+      showToast(`Discipline updated to ${newDiscipline}`);
     } catch (err: any) {
       showToast(`Failed to update discipline: ${err.message}`);
-      fetchTasks();
     }
   };
 
@@ -684,7 +698,7 @@ export const TaskListView: React.FC = () => {
 
       {/* Main Table Component */}
       <div className="flex-1 min-h-0 flex flex-col">
-        {loading ? (
+        {loading && tasks.length === 0 ? (
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-12 text-center text-xs text-slate-500 dark:text-slate-400 h-full flex items-center justify-center">
             Loading engineering tasks...
           </div>

@@ -44,6 +44,7 @@ import {
   Loader2,
   ShieldAlert,
   Megaphone,
+  FolderGit2,
 } from 'lucide-react';
 import { formatDateDisplay, getTodayYmd } from '../lib/dateUtils';
 import { DatePicker } from '../components/common/DatePicker';
@@ -154,6 +155,7 @@ export const BulletinsView: React.FC = () => {
   const [pinnedCount, setPinnedCount] = useState(0);
   const [recentCount, setRecentCount] = useState(0);
   const [reviewRequiredCount, setReviewRequiredCount] = useState(0);
+  const [tabCounts, setTabCounts] = useState<Record<string, number>>({});
 
   // Announcements
   const [announcements, setAnnouncements] = useState<BulletinAnnouncement[]>([]);
@@ -228,6 +230,9 @@ export const BulletinsView: React.FC = () => {
       setPinnedCount(result.pinnedCount);
       setRecentCount(result.recentCount);
       setReviewRequiredCount(result.reviewRequiredCount);
+      if (result.tabCounts) {
+        setTabCounts(result.tabCounts);
+      }
     } catch (err: any) {
       console.error('Failed to load bulletins:', err);
       showToast(`Error: ${err.message || 'Could not load resources'}`);
@@ -678,26 +683,79 @@ export const BulletinsView: React.FC = () => {
           )}
         </div>
 
+        {/* Project Navigation Tabs */}
+        {projects && projects.length > 0 && (
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs border-b border-slate-100 dark:border-slate-800">
+            <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase shrink-0 mr-1 flex items-center gap-1">
+              <FolderGit2 className="w-3.5 h-3.5 text-blue-600 dark:text-sky-400" />
+              <span>Projects:</span>
+            </span>
+            <button
+              onClick={() => {
+                setSelectedProjectId('ALL');
+                setSelectedPackageId('ALL');
+              }}
+              className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all shrink-0 cursor-pointer ${
+                selectedProjectId === 'ALL'
+                  ? 'bg-blue-600 text-white shadow-2xs font-bold'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+              }`}
+            >
+              All Projects
+            </button>
+            {projects.map((proj) => {
+              const isSelected = selectedProjectId === proj.id;
+              return (
+                <button
+                  key={proj.id}
+                  onClick={() => {
+                    setSelectedProjectId(proj.id);
+                    setSelectedPackageId('ALL');
+                  }}
+                  className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 ${
+                    isSelected
+                      ? 'bg-blue-600 text-white shadow-2xs font-bold'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                  }`}
+                  title={`${proj.code} - ${proj.name}`}
+                >
+                  <span className="font-mono font-bold">{proj.code}</span>
+                  <span className="hidden md:inline text-[11px] opacity-90 truncate max-w-[140px] font-normal">{proj.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {/* Quick Filter Buttons & Standard Dropdowns in one dense line */}
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-          {/* Quick filter chips */}
+          {/* Quick filter chips with Item Count Badges */}
           <div className="flex flex-wrap items-center gap-1.5">
             {QUICK_FILTERS.map((chip) => {
               const isActive = activeQuickFilter === chip.id;
+              const count = tabCounts[chip.id] !== undefined
+                ? tabCounts[chip.id]
+                : (chip.id === 'ALL' ? totalCount : chip.id === 'PINNED' ? pinnedCount : 0);
               return (
                 <button
                   key={chip.id}
                   onClick={() => setActiveQuickFilter(chip.id)}
-                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                  className={`px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-1.5 ${
                     isActive
                       ? 'bg-[#0b3b70] text-white shadow-2xs font-bold'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700'
                   }`}
                 >
-                  {chip.label}
-                  {chip.id === 'PINNED' && pinnedCount > 0 && (
-                    <span className="ml-1 text-[10px] opacity-80">({pinnedCount})</span>
-                  )}
+                  <span>{chip.label}</span>
+                  <span
+                    className={`text-[10px] min-w-[18px] px-1.5 py-0.5 rounded-full font-mono font-bold leading-none text-center ${
+                      isActive
+                        ? 'bg-white/25 text-white'
+                        : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    {count}
+                  </span>
                 </button>
               );
             })}

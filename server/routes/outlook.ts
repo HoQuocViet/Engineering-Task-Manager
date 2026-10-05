@@ -656,7 +656,7 @@ router.post('/sync', async (req, res) => {
   }
 });
 
-// 6. Get cached calendar events
+// 6. Get cached calendar events / meetings
 router.get('/events', (req, res) => {
   try {
     const { startDate, endDate } = req.query;
@@ -671,6 +671,151 @@ router.get('/events', (req, res) => {
 
     const rows = queryAll(sql, params);
     res.json({ events: rows });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 6b. Create meeting (MS Teams / Calendar Event)
+router.post('/events', (req, res) => {
+  try {
+    const {
+      subject,
+      body_preview,
+      start_date,
+      end_date,
+      start_time,
+      end_time,
+      is_all_day,
+      location,
+      meeting_link,
+      organizer_name,
+      organizer_email,
+      attendees,
+    } = req.body;
+
+    if (!subject || !subject.trim()) {
+      return res.status(400).json({ error: 'Meeting subject is required.' });
+    }
+
+    const sDate = start_date || new Date().toISOString().slice(0, 10);
+    const eDate = end_date || sDate;
+    const sTime = start_time ? (start_time.includes('T') ? start_time : `${sDate}T${start_time}:00`) : `${sDate}T09:00:00`;
+    const eTime = end_time ? (end_time.includes('T') ? end_time : `${eDate}T${end_time}:00`) : `${eDate}T10:00:00`;
+    const newId = `evt-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const nowIso = new Date().toISOString();
+
+    const attendeesJson = attendees ? JSON.stringify(attendees) : '[]';
+
+    run(`
+      INSERT INTO outlook_events (
+        id, subject, body_preview, start_time, end_time, start_date, end_date,
+        is_all_day, is_cancelled, location, meeting_link, organizer_name,
+        organizer_email, attendees_json, web_link, synced_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      newId,
+      subject.trim(),
+      body_preview?.trim() || '',
+      sTime,
+      eTime,
+      sDate,
+      eDate,
+      is_all_day ? 1 : 0,
+      location?.trim() || 'Microsoft Teams',
+      meeting_link?.trim() || '',
+      organizer_name?.trim() || 'Engineering Team',
+      organizer_email?.trim() || '',
+      attendeesJson,
+      meeting_link?.trim() || '',
+      nowIso,
+    ]);
+
+    const created = queryOne('SELECT * FROM outlook_events WHERE id = ?', [newId]);
+    res.json({ success: true, event: created });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 6c. Update meeting (MS Teams / Calendar Event)
+router.put('/events/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const existing = queryOne('SELECT * FROM outlook_events WHERE id = ?', [id]);
+    if (!existing) {
+      return res.status(404).json({ error: 'Meeting event not found.' });
+    }
+
+    const {
+      subject,
+      body_preview,
+      start_date,
+      end_date,
+      start_time,
+      end_time,
+      is_all_day,
+      location,
+      meeting_link,
+      organizer_name,
+      organizer_email,
+      attendees,
+    } = req.body;
+
+    const sDate = start_date || existing.start_date;
+    const eDate = end_date || sDate;
+    const sTime = start_time ? (start_time.includes('T') ? start_time : `${sDate}T${start_time}:00`) : existing.start_time;
+    const eTime = end_time ? (end_time.includes('T') ? end_time : `${eDate}T${end_time}:00`) : existing.end_time;
+    const attendeesJson = attendees !== undefined ? JSON.stringify(attendees) : existing.attendees_json;
+
+    run(`
+      UPDATE outlook_events
+      SET subject = COALESCE(?, subject),
+          body_preview = COALESCE(?, body_preview),
+          start_date = ?,
+          end_date = ?,
+          start_time = ?,
+          end_time = ?,
+          is_all_day = ?,
+          location = COALESCE(?, location),
+          meeting_link = COALESCE(?, meeting_link),
+          organizer_name = COALESCE(?, organizer_name),
+          organizer_email = COALESCE(?, organizer_email),
+          attendees_json = ?,
+          web_link = COALESCE(?, web_link),
+          synced_at = ?
+      WHERE id = ?
+    `, [
+      subject?.trim() || existing.subject,
+      body_preview !== undefined ? body_preview.trim() : existing.body_preview,
+      sDate,
+      eDate,
+      sTime,
+      eTime,
+      is_all_day !== undefined ? (is_all_day ? 1 : 0) : existing.is_all_day,
+      location !== undefined ? location.trim() : existing.location,
+      meeting_link !== undefined ? meeting_link.trim() : existing.meeting_link,
+      organizer_name !== undefined ? organizer_name.trim() : existing.organizer_name,
+      organizer_email !== undefined ? organizer_email.trim() : existing.organizer_email,
+      attendeesJson,
+      meeting_link !== undefined ? meeting_link.trim() : existing.web_link,
+      new Date().toISOString(),
+      id,
+    ]);
+
+    const updated = queryOne('SELECT * FROM outlook_events WHERE id = ?', [id]);
+    res.json({ success: true, event: updated });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 6d. Delete meeting (MS Teams / Calendar Event)
+router.delete('/events/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    run('DELETE FROM outlook_events WHERE id = ?', [id]);
+    res.json({ success: true, message: 'Meeting deleted successfully.' });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

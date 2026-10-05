@@ -261,7 +261,7 @@ router.get('/stats', (req: Request, res: Response) => {
       },
     ];
 
-    // 8. Critical Priority Focus Tasks
+    // 8. Urgent / Critical Priority Focus Tasks (Prioritizing CRITICAL & HIGH, with all statuses for complete filtering)
     const urgentTasksSql = `
       SELECT 
         t.*,
@@ -281,18 +281,23 @@ router.get('/stats', (req: Request, res: Response) => {
       LEFT JOIN projects pr ON (t.project_id = pr.id OR (t.project_id IS NULL AND p.project_id = pr.id))
       LEFT JOIN categories c ON t.category_id = c.id
       LEFT JOIN users u ON t.assignee_id = u.id
-      WHERE t.status != 'DONE' AND t.status != 'CANCELLED' 
-        AND t.priority = 'CRITICAL'
-        AND ${whereTaskSql}
+      WHERE ${whereTaskSql}
       ORDER BY 
+        CASE t.priority 
+          WHEN 'CRITICAL' THEN 1 
+          WHEN 'HIGH' THEN 2 
+          WHEN 'MEDIUM' THEN 3 
+          ELSE 4 
+        END,
+        CASE WHEN t.status = 'DONE' THEN 2 ELSE 1 END,
         CASE WHEN t.deadline IS NULL THEN 1 ELSE 0 END,
         t.deadline ASC,
         t.created_at DESC
-      LIMIT 50
+      LIMIT 300
     `;
     const urgentTasks = query(urgentTasksSql, filterParams);
 
-    // Fetch tags for urgent tasks
+    // Fetch tags and interfaces for urgent tasks
     if (urgentTasks.length > 0) {
       const placeholders = urgentTasks.map(() => '?').join(',');
       const tagsSql = `
@@ -308,8 +313,31 @@ router.get('/stats', (req: Request, res: Response) => {
         tagsByTaskId.get(tg.task_id)!.push({ id: tg.id, name: tg.name, color: tg.color });
       }
 
+      // Multidisciplinary interface disciplines for urgent tasks
+      const interfacesSql = `
+        SELECT task_id, id, discipline, status, priority, due_date, next_follow_up, action, external_pic
+        FROM task_interfaces
+        WHERE task_id IN (${placeholders})
+        ORDER BY 
+          CASE 
+            WHEN status = 'WAITING' THEN 1
+            WHEN status = 'OPEN' THEN 2
+            WHEN status = 'RECEIVED' THEN 3
+            WHEN status = 'CLOSED' THEN 4
+            ELSE 5
+          END,
+          due_date ASC
+      `;
+      const allInterfaces = query(interfacesSql, urgentTasks.map((t: any) => t.id));
+      const interfacesByTaskId = new Map<string, any[]>();
+      for (const itf of allInterfaces) {
+        if (!interfacesByTaskId.has(itf.task_id)) interfacesByTaskId.set(itf.task_id, []);
+        interfacesByTaskId.get(itf.task_id)!.push(itf);
+      }
+
       for (const t of urgentTasks) {
         t.tags = tagsByTaskId.get(t.id) || [];
+        t.interfaces = interfacesByTaskId.get(t.id) || [];
       }
     }
 

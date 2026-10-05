@@ -2,7 +2,7 @@
 
 > **Document Type**: Comprehensive Architectural & Functional Specification (Vibe-Coding Ready)  
 > **Target LLMs / Code Engines**: Claude 3.7 Sonnet / Cursor / GitHub Copilot / Gemini  
-> **Version**: 1.3.0  
+> **Version**: 1.4.0  
 > **Target Platform**: Responsive Web Single-Page Application (SPA) / Local Hybrid Execution  
 > **Default Port**: 3000  
 > **Database Engine**: Local Persistent SQLite via WebAssembly (`sql.js`)  
@@ -138,6 +138,7 @@
 │       ├── ProjectsView.tsx    # Engineering projects list, metadata, progress cards
 │       ├── PackagesView.tsx    # Procurement package deliverable tracker with vendor status
 │       ├── CalendarView.tsx    # Month/week interactive calendar with Outlook event overlay
+│       ├── BulletinsView.tsx   # Engineering bulletins, documents & URL portal per project
 │       ├── TagsView.tsx        # Tag management and task reference counters
 │       ├── SettingsView.tsx    # Multi-tab workspace settings
 │       └── settings/
@@ -448,8 +449,15 @@ All major views must feature a consistent 62px-height top banner adhering to the
 - **Discipline & Status Distribution Charts (Recharts)**:
   - *Discipline Breakdown*: Stacked/Bar chart illustrating tasks distributed across Mechanical, Piping, Electrical, Structural, and Process.
   - *Status Donut Chart*: Visual progress share.
-- **Urgent Items Queue**: Direct list of Critical and Overdue tasks with one-click detail viewing.
-- **Embedded Task List Table**: Filtered data grid allowing managers to update progress directly on the dashboard.
+- **Critical Focus Items Table (`TaskListTable.tsx`)**:
+  - Exactly synchronizes layout, columns, and interactive functionality with Master Task List (`TaskListTable`).
+  - Displays high-priority and urgent focus deliverables with zero-jitter blue selection box, keyboard navigation ($\uparrow$ / $\downarrow$ / `Enter`), and multi-select checkboxes.
+  - Full inline editing without opening modals: Status (`TODO`, `IN PROGRESS`, `WAITING`, `DONE`), Priority (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`), Progress slider (0–100%), and Interface Discipline selector.
+  - Multi-column sortable headers (including Interface sort, Priority, Status, Deadline, and Forecast).
+  - Synchronized column-level filters (Status, Priority, Discipline, Deadline, Forecast).
+- **Bulletins & Resources Quick Access Widget**:
+  - Dashboard widget presenting Pinned Fast Links and resources requiring review (`Due Review` counter badge).
+  - Direct 1-click navigation to explore all technical bulletins and project resources.
 
 #### View 2: Master Task List (`TaskListView.tsx`)
 - **Header**: Icon `<CheckSquare>`, Title: `ENGINEERING MASTER TASK LIST`, Subtitle: `ALL DELIVERABLES, MILESTONES & DISCIPLINE WORK`.
@@ -459,6 +467,13 @@ All major views must feature a consistent 62px-height top banner adhering to the
   - Dropdown filters: Project, Package, Category/Discipline, Assignee, Priority, PIC (Person In Charge).
   - Action buttons: Quick Add Task (`+`), Export to Excel (`.xlsx`), Print Preview modal.
 - **Dense Data Grid (`TaskListTable.tsx`)**:
+  - **Interface Discipline Column Architecture (`w-[96px]`)**:
+    - Interactive inline dropdown selector populated from `INTERFACE_DISCIPLINES` (Instrument, Process, Piping, Mechanical, Electrical, Structural, Pipeline, Safety, EMT, PMT, Other).
+    - Color-coded badges and selectors mapped directly from `DISCIPLINE_COLORS` for fast visual distinction across disciplines.
+    - **Zero-Refresh Optimistic State Updates**: Changing a discipline updates the item locally in real time and sends the update to the backend with zero screen flicker, zero re-fetching, and zero scroll jump. Only displays a clean toast: *"Interface discipline updated"*.
+    - **Clickable Header Sorting**: Header button toggles `interface_asc` and `interface_desc`, backed by SQLite query ordering on `MIN/MAX(ti.discipline)`.
+    - Discipline filter in header dropdown populated from all standard disciplines.
+    - Default discipline for new tasks initialized to `Instrument` (in single create, batch create, and detail modal).
   - **PIC (Person In Charge) Column Architecture (`w-[84px]`)**:
     - Replaces legacy progress column with a compact, left-aligned `w-[84px]` column.
     - Stacked circular avatars: Displays up to 3 circular avatar photos with `-space-x-1.5` overlapping styling, plus a `+N` badge if > 3 PICs are assigned.
@@ -529,6 +544,23 @@ All major views must feature a consistent 62px-height top banner adhering to the
   - One-click **Download Database (`.sqlite`)** for safe offline backup.
   - **Import / Restore Database**: Accepts any valid SQLite file buffer and hot-reloads data without server restart.
   - **Reset to Demo Data**: Re-seeds default engineering projects, packages, and mock deliverables.
+
+#### View 9: Engineering Bulletins & Resources Portal (`BulletinsView.tsx`)
+- **Header**: Icon `<Bookmark>`, Title: `ENGINEERING BULLETINS & RESOURCES`, Subtitle: `CENTRALIZED TECHNICAL DOCUMENTS, SPECIFICATIONS, PORTALS & FAST-LINKS`.
+- **Project Partitioning Bar (`Projects: All Projects | [Project Codes]`)**:
+  - Dynamically mirrors all active registered engineering projects (`projects` roster).
+  - Allows instant one-click switching to filter documents and links belonging exclusively to the selected project (`selectedProjectId`).
+  - Selecting `All Projects` displays the global multidisciplinary technical library.
+- **Categorized Resource Tabs with Dynamic Item Count Badges**:
+  - Quick filter chips: `ALL`, `PINNED`, `GOOGLE_SHEET`, `GOOGLE_DOCS`, `NETWORK_PATH`, `LOCAL_PATH`, `WEB_URL`, `VENDOR_PORTAL`, and `REVIEW_REQUIRED`.
+  - Every filter chip contains a dedicated real-time count badge (`tabCounts`) indicating the exact quantity of documents in that category under current project/search filters.
+- **Resource Management & Automated Metadata**:
+  - Fast URL & path registration: auto-classifies resource type (Google Sheets, Google Docs, SharePoint, Microsoft Teams, SMB Network Paths `\\server\share`, Local Drives, Vendor Portals).
+  - Automated title extraction (`/api/bulletins/detect-title`) for web URLs.
+  - Superseded document version tracking: links obsolete revisions directly to replacement reference documents.
+  - Scheduled review governance: tracks upcoming review dates and highlights resources flagged as `Due Review` with warning badges.
+- **Engineering Announcements Board**:
+  - Dedicated banner board for technical transmittals, discipline notices, and project bulletins with pinning support.
 
 ---
 
@@ -717,6 +749,19 @@ npm start
       5. Forecast Revision Logic & Non-increment on same date.
       6. Database Integrity & Cross-Project Package Rejection (HTTP 400).
       7. Atomic Transaction Management & Automatic Rollback.
+14. **Zero-Refresh Inline Interface Discipline Change with Smooth Feedback**:
+    - Tích hợp bộ chọn nhanh Interface Discipline trực tiếp trên từng hàng của `TaskListTable` với màu sắc chuyên ngành (`DISCIPLINE_COLORS`).
+    - Áp dụng cập nhật optimistic state cục bộ ngay lập tức và gọi API ngầm, loại bỏ hoàn toàn việc re-render/re-fetch toàn bộ bảng gây giật màn hình hoặc mất vị trí cuộn / focus.
+    - Phát thông báo toast nhẹ nhàng duy nhất: *"Interface discipline updated"*.
+    - Mặc định khởi tạo discipline ban đầu là `Instrument` cho cả tạo task đơn lẻ, tạo hàng loạt theo gói thầu và modal chi tiết.
+    - Hỗ trợ sắp xếp cột Interface (`interface_asc` / `interface_desc`) ở cả tầng SQLite backend và frontend table header.
+15. **Dashboard "Critical Focus Items" Synchronization with Master Task Table**:
+    - Đồng bộ hóa 100% cấu trúc, cách sắp xếp và chức năng của bảng "Critical Focus Items" trên Executive Dashboard sang dùng chung component `TaskListTable`.
+    - Đầy đủ tính năng: chọn dòng bo góc zero-jitter (`shadow-inset`), inline updates (Discipline, Status, Priority, Progress slider), sắp xếp các cột đa tiêu chí, lọc dữ liệu cột, phím mũi tên và Enter để mở modal chi tiết.
+16. **Bulletins Multi-Project Division & Item Count Badges**:
+    - Bổ sung thanh điều hướng phân loại tài nguyên kỹ thuật theo từng dự án (`Projects: All Projects, [Project Codes]`) đồng bộ tự động theo các dự án đã tạo trong hệ thống.
+    - Hiển thị badge số lượng tài nguyên (item count) trực quan trên từng tab danh mục (All, Pinned, Google Sheets, Google Docs, Network, Web Links, Vendor, Due Review) lấy từ `tabCounts` backend.
+    - Tích hợp widget truy cập nhanh Bulletins trên Dashboard hiển thị Pinned Fast Links và tài nguyên đến hạn review.
 
 ### 9.2 In Progress & Verification (Đang hoàn thiện & Theo dõi)
 1. **Modal Form PIC Consistency**:
