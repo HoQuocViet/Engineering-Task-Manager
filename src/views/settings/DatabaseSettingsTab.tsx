@@ -10,6 +10,9 @@ import {
   Trash2,
   ShieldCheck,
   AlertCircle,
+  Copy,
+  Check,
+  Terminal,
 } from 'lucide-react';
 
 export const DatabaseSettingsTab: React.FC = () => {
@@ -38,6 +41,14 @@ export const DatabaseSettingsTab: React.FC = () => {
   const [importError, setImportError] = useState<string | null>(null);
   const [isExportingDb, setIsExportingDb] = useState(false);
   const [isExportingJson, setIsExportingJson] = useState(false);
+  const [copiedCommand, setCopiedCommand] = useState<string | null>(null);
+
+  const copyToClipboard = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedCommand(id);
+    showToast('Copied command to clipboard!');
+    setTimeout(() => setCopiedCommand(null), 2500);
+  };
 
   const handleExportDb = async () => {
     setIsExportingDb(true);
@@ -506,6 +517,89 @@ export const DatabaseSettingsTab: React.FC = () => {
               </button>
             </div>
           </div>
+        </div>
+      </div>
+      {/* Section 3: On-Premise & Local Docker Permanent Storage Guide */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-2xs space-y-5 transition-colors">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200/60 dark:border-blue-800/60 flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0">
+              <Terminal className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Local Docker Mode (Option C - 100% Permanent Storage)</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Run this application on your local machine or internal company server with Docker Volume mounting (<code className="font-mono text-blue-600 dark:text-blue-400">./data:/app/data</code>) so your SQLite database and attachments are permanently stored on your physical hard drive.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {/* Quick Start with Docker Compose */}
+          <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/50 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center space-x-2">
+                <span>1. One-Click Docker Compose</span>
+                <span className="text-[10px] bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded-full font-semibold">Recommended</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => copyToClipboard('docker compose up -d --build', 'compose')}
+                className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 flex items-center space-x-1 font-medium cursor-pointer"
+              >
+                {copiedCommand === 'compose' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedCommand === 'compose' ? 'Copied' : 'Copy'}</span>
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+              Mounts the <code className="font-mono text-slate-700 dark:text-slate-300">./data</code> directory to your hard drive. Data survives computer reboots, Docker restarts, and container updates.
+            </p>
+            <div className="bg-slate-900 text-slate-100 font-mono text-[11px] p-3 rounded-lg overflow-x-auto select-all">
+              docker compose up -d --build
+            </div>
+          </div>
+
+          {/* Quick Start with Script */}
+          <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/50 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                2. Quick Launcher Scripts
+              </span>
+              <button
+                type="button"
+                onClick={() => copyToClipboard('chmod +x run-local.sh && ./run-local.sh', 'script')}
+                className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 flex items-center space-x-1 font-medium cursor-pointer"
+              >
+                {copiedCommand === 'script' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedCommand === 'script' ? 'Copied' : 'Copy'}</span>
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+              Pre-configured scripts available directly in the project root:
+            </p>
+            <div className="space-y-1.5 font-mono text-[11px]">
+              <div className="bg-slate-900 text-slate-100 p-2.5 rounded-lg select-all flex justify-between items-center">
+                <span>Windows: double-click <span className="text-amber-400">run-local.bat</span></span>
+              </div>
+              <div className="bg-slate-900 text-slate-100 p-2.5 rounded-lg select-all flex justify-between items-center">
+                <span>macOS/Linux: <span className="text-emerald-400">./run-local.sh</span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Instructions on migrating current database */}
+        <div className="p-4 rounded-xl border border-blue-200/80 dark:border-blue-800/80 bg-blue-50/50 dark:bg-blue-950/30 text-xs space-y-2">
+          <div className="font-bold text-blue-900 dark:text-blue-200 flex items-center space-x-2">
+            <HardDrive className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            <span>How to transfer your current data to your local machine:</span>
+          </div>
+          <ol className="list-decimal list-inside space-y-1 text-[11px] text-blue-800 dark:text-blue-300 leading-relaxed">
+            <li>Click <strong>Export SQLite Database (.db)</strong> at the top to save your current database file (<code className="font-mono">app.db</code>).</li>
+            <li>Place that downloaded file into the <code className="font-mono font-semibold">data/app.db</code> directory of the project on your machine.</li>
+            <li>Run <code className="font-mono font-semibold">docker compose up -d</code> — all your projects, deliverables, and settings will load locally with zero data loss.</li>
+          </ol>
         </div>
       </div>
     </div>

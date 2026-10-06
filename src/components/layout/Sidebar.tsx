@@ -37,6 +37,7 @@ import {
   Pin,
   PinOff,
   X,
+  BookOpen,
 } from 'lucide-react';
 
 export const renderBrandingIcon = (
@@ -603,6 +604,21 @@ export const Sidebar: React.FC = () => {
                 )}
               </div>
             </button>
+            <a
+              href="/user-guide.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full flex items-center gap-3 p-2 rounded-lg text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-200/80 dark:hover:bg-slate-800 hover:text-slate-950 dark:hover:text-white transition-colors cursor-pointer group"
+              title="Open Interactive HTML User Guide in new tab"
+            >
+              <BookOpen className="w-4 h-4 text-slate-400 dark:text-slate-500 group-hover:text-blue-600 dark:group-hover:text-sky-400" />
+              <div className="flex items-center justify-between flex-1">
+                <span className="uppercase text-xs font-semibold tracking-wide">USER GUIDE</span>
+                <span className="text-[9px] bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-sky-300 border border-blue-200 dark:border-blue-700/50 px-1.5 py-0.2 rounded font-bold">
+                  HTML
+                </span>
+              </div>
+            </a>
           </div>
 
           {/* Future Modules (V2) */}

@@ -2,17 +2,34 @@ import { query, queryOne, run } from './db.js';
 import crypto from 'crypto';
 
 export function seedInitialDataIfNeeded(forceReset = false): void {
-  const existingTasks = query<{ count: number }>('SELECT COUNT(*) as count FROM tasks');
-  const legacyPackages = queryOne<{ count: number }>("SELECT COUNT(*) as count FROM packages WHERE code IN ('PK-101', 'PK-202', 'PK-303', 'PK-404', 'PK-505', 'PK-606')");
-  
-  const shouldReset = forceReset || (legacyPackages && legacyPackages.count > 0);
-  if (!shouldReset && existingTasks[0]?.count > 0) {
-    return;
+  // If not forceReset, check if database was already initialized or seeded previously
+  if (!forceReset) {
+    try {
+      const initSetting = queryOne<{ value: string }>("SELECT value FROM system_settings WHERE key = 'seed_initialized'");
+      if (initSetting && initSetting.value === 'true') {
+        // System was already initialized; never automatically inject demo data or wipe user data
+        return;
+      }
+    } catch (e) {
+      // Table might not exist yet if older schema
+    }
+
+    const existingTasks = queryOne<{ count: number }>('SELECT COUNT(*) as count FROM tasks');
+    const existingUsers = queryOne<{ count: number }>('SELECT COUNT(*) as count FROM users');
+    const existingProjects = queryOne<{ count: number }>('SELECT COUNT(*) as count FROM projects');
+
+    // If database already contains any user, project, or task, mark as initialized and do NOT seed
+    if ((existingTasks && existingTasks.count > 0) || (existingUsers && existingUsers.count > 0) || (existingProjects && existingProjects.count > 0)) {
+      try {
+        run("INSERT OR REPLACE INTO system_settings (key, value, updated_at) VALUES ('seed_initialized', 'true', ?)", [new Date().toISOString()]);
+      } catch (e) {}
+      return;
+    }
   }
 
   console.log('Seeding initial engineering task management database with complete EPC demo dataset...');
 
-  if (shouldReset || forceReset) {
+  if (forceReset) {
     run('DELETE FROM task_bulletins');
     run('DELETE FROM bulletin_announcements');
     run('DELETE FROM bulletin_resources');
@@ -1213,6 +1230,10 @@ export function seedInitialDataIfNeeded(forceReset = false): void {
     0,
     formatIso(new Date(Date.now() - 24 * 3600000)),
   ]);
+
+  try {
+    run("INSERT OR REPLACE INTO system_settings (key, value, updated_at) VALUES ('seed_initialized', 'true', ?)", [formatIso(now)]);
+  } catch (e) {}
 
   console.log(`Seeded ${taskSeeds.length} tasks, ${interfaceSeeds.length} interfaces, ${bulletinSeeds.length} bulletin resources, and announcements successfully.`);
 }

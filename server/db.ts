@@ -363,6 +363,12 @@ function initSchema(database: Database): void {
       is_pinned INTEGER DEFAULT 0,
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS system_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 
   // 2. Safe schema migrations for existing pre-created database tables

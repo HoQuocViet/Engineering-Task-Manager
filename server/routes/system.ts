@@ -90,6 +90,8 @@ router.post('/clear-all', requireAdmin, (req: Request, res: Response) => {
         run('DELETE FROM packages');
         run('DELETE FROM projects');
       }
+
+      run("INSERT OR REPLACE INTO system_settings (key, value, updated_at) VALUES ('seed_initialized', 'true', ?)", [new Date().toISOString()]);
     });
 
     res.json({
@@ -256,6 +258,8 @@ router.post('/import-json', requireAdmin, (req: Request, res: Response) => {
               [ac.id, ac.task_id, ac.user_id, ac.activity_type, ac.field_name, ac.old_value, ac.new_value, ac.note, ac.created_at || new Date().toISOString()]);
           }
         }
+
+        run("INSERT OR REPLACE INTO system_settings (key, value, updated_at) VALUES ('seed_initialized', 'true', ?)", [new Date().toISOString()]);
       } finally {
         run('PRAGMA foreign_keys = ON;');
       }
@@ -296,6 +300,10 @@ router.post('/upload-db', requireAdmin, upload.single('dbFile'), async (req: Req
 
     // Replace database with uploaded buffer
     await replaceDbWithBuffer(file.buffer);
+
+    try {
+      run("INSERT OR REPLACE INTO system_settings (key, value, updated_at) VALUES ('seed_initialized', 'true', ?)", [new Date().toISOString()]);
+    } catch (e) {}
 
     const counts = {
       projects: queryOne<{ cnt: number }>('SELECT COUNT(*) as cnt FROM projects')?.cnt || 0,

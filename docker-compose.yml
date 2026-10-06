@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: engineering-task-manager
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      # Persistent storage: binds host ./data to container /app/data
+      # This guarantees that app.db and all uploads remain permanently on your host machine
+      - ./data:/app/data
+    environment:
+      - NODE_ENV=production
+      - PORT=3000

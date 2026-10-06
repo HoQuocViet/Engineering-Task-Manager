@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>User Guide - Engineering Task & Work Manager</title>
+  <style>
+    :root {
+      --primary: #0b3b70;
+      --primary-hover: #0f4c81;
+      --primary-light: #e0f2fe;
+      --accent: #2563eb;
+      --accent-teams: #4f46e5;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --bg-page: #f8fafc;
+      --bg-card: #ffffff;
+      --border-color: #e2e8f0;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: var(--text-main);
+      background-color: var(--bg-page);
+      line-height: 1.6;
+      font-size: 14px;
+    }
+
+    /* Header Banner */
+    .header-banner {
+      background: linear-gradient(135deg, #072547 0%, #0b3b70 50%, #1e40af 100%);
+      color: #ffffff;
+      padding: 36px 24px;
+      box-shadow: 0 4px 12px rgba(11, 59, 112, 0.15);
+    }
+
+    .header-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: gap;
+      gap: 16px;
+    }
+
+    .header-title-group h1 {
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .header-title-group p {
+      color: #bae6fd;
+      font-size: 13px;
+      margin-top: 6px;
+    }
+
+    .badge-version {
+      background: rgba(255, 255, 255, 0.15);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-family: monospace;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn-action {
+      background: #ffffff;
+      color: var(--primary);
+      font-weight: 700;
+      font-size: 12px;
+      padding: 8px 16px;
+      border-radius: 8px;
+      text-decoration: none;
+      border: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      transition: all 0.15s ease;
+    }
+
+    .btn-action:hover {
+      background: #f0f9ff;
+      transform: translateY(-1px);
+    }
+
+    /* Main Container */
+    .container {
+      max-width: 1200px;
+      margin: 28px auto;
+      padding: 0 20px;
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      gap: 28px;
+    }
+
+    @media (max-width: 860px) {
+      .container {
+        grid-template-columns: 1fr;
+      }
+      .toc-sidebar {
+        position: static !important;
+      }
+    }
+
+    /* Table of contents sidebar */
+    .toc-sidebar {
+      position: sticky;
+      top: 24px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 18px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      height: fit-content;
+      max-height: calc(100vh - 48px);
+      overflow-y: auto;
+    }
+
+    .toc-title {
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      letter-spacing: 0.8px;
+      margin-bottom: 12px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .toc-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .toc-link {
+      color: var(--text-main);
+      text-decoration: none;
+      font-size: 12.5px;
+      font-weight: 500;
+      padding: 6px 10px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.15s;
+    }
+
+    .toc-link:hover {
+      background: var(--primary-light);
+      color: var(--primary);
+      font-weight: 600;
+    }
+
+    /* Content Area */
+    .content-area {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .guide-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 24px 28px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+
+    .guide-card h2 {
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--primary);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid var(--primary-light);
+    }
+
+    .guide-card h3 {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-top: 18px;
+      margin-bottom: 8px;
+    }
+
+    .guide-card p {
+      color: #334155;
+      font-size: 13.5px;
+      margin-bottom: 12px;
+    }
+
+    .guide-card ul, .guide-card ol {
+      margin-left: 20px;
+      margin-bottom: 14px;
+      color: #334155;
+      font-size: 13px;
+    }
+
+    .guide-card li {
+      margin-bottom: 6px;
+    }
+
+    /* Key visual callouts */
+    .callout {
+      border-radius: 10px;
+      padding: 14px 18px;
+      margin: 14px 0;
+      font-size: 13px;
+      border-left: 4px solid;
+    }
+
+    .callout-info {
+      background: #eff6ff;
+      border-left-color: #2563eb;
+      color: #1e40af;
+    }
+
+    .callout-success {
+      background: #ecfdf5;
+      border-left-color: #10b981;
+      color: #065f46;
+    }
+
+    .callout-warning {
+      background: #fffbeb;
+      border-left-color: #f59e0b;
+      color: #92400e;
+    }
+
+    .callout-teams {
+      background: #f5f3ff;
+      border-left-color: #6366f1;
+      color: #3730a3;
+    }
+
+    /* Feature grids */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+      margin: 16px 0;
+    }
+
+    .feature-box {
+      border: 1px solid var(--border-color);
+      background: #f8fafc;
+      border-radius: 10px;
+      padding: 16px;
+    }
+
+    .feature-box h4 {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .feature-box p {
+      font-size: 12px;
+      color: #475569;
+      margin-bottom: 0;
+    }
+
+    /* Code & Keyboard shortcut badges */
+    kbd {
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      border-bottom-width: 2px;
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-size: 11px;
+      font-family: monospace;
+      font-weight: 700;
+      color: #334155;
+    }
+
+    code {
+      background: #f1f5f9;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-family: monospace;
+      color: #0f172a;
+    }
+
+    pre {
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 14px 18px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: 12px;
+      font-family: monospace;
+      margin: 12px 0;
+    }
+
+    /* Step badges */
+    .step-item {
+      display: flex;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+
+    .step-number {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: var(--primary);
+      color: #ffffff;
+      font-weight: 700;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      shrink-0: 0;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .step-text {
+      flex: 1;
+    }
+
+    .step-text strong {
+      display: block;
+      font-size: 13.5px;
+      color: var(--text-main);
+      margin-bottom: 2px;
+    }
+
+    /* Pill Badges */
+    .badge-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 700;
+      border: 1px solid transparent;
+    }
+
+    .pill-blue { background: #dbeafe; color: #1e40af; border-color: #bfdbfe; }
+    .pill-green { background: #d1fae5; color: #065f46; border-color: #a7f3d0; }
+    .pill-amber { background: #fef3c7; color: #92400e; border-color: #fde68a; }
+    .pill-rose { background: #ffe4e6; color: #9f1239; border-color: #fecdd3; }
+    .pill-indigo { background: #e0e7ff; color: #3730a3; border-color: #c7d2fe; }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      padding: 30px;
+      color: var(--text-muted);
+      font-size: 12px;
+      border-top: 1px solid var(--border-color);
+      margin-top: 40px;
+    }
+
+    @media print {
+      body { background: #ffffff; font-size: 12pt; }
+      .header-banner { background: #0b3b70 !important; color: #ffffff !important; }
+      .toc-sidebar, .header-actions { display: none !important; }
+      .container { display: block; max-width: 100%; margin: 0; padding: 0; }
+      .guide-card { border: none; box-shadow: none; padding: 12px 0; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header Banner -->
+  <header class="header-banner">
+    <div class="header-container">
+      <div class="header-title-group">
+        <h1>
+          <span>Engineering Task & Work Manager</span>
+          <span class="badge-version">v1.5.0</span>
+        </h1>
+        <p>Comprehensive User Guide, Operational Workflows & Deployment Handbook</p>
+      </div>
+      <div class="header-actions">
+        <a href="/" class="btn-action">
+          ← Back to Application
+        </a>
+        <button onclick="window.print()" class="btn-action">
+          🖨️ Print Guide
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Layout -->
+  <div class="container">
+    <!-- Sidebar Navigation -->
+    <nav class="toc-sidebar">
+      <div class="toc-title">Table of Contents</div>
+      <ul class="toc-list">
+        <li><a href="#overview" class="toc-link">1. Overview & Core Roles</a></li>
+        <li><a href="#dashboard" class="toc-link">2. Executive Dashboard</a></li>
+        <li><a href="#tasklist" class="toc-link">3. Master Task List Table</a></li>
+        <li><a href="#calendar" class="toc-link">4. Calendar & MS Teams</a></li>
+        <li><a href="#mywork" class="toc-link">5. My Work Workspace</a></li>
+        <li><a href="#projects" class="toc-link">6. Projects & Packages</a></li>
+        <li><a href="#bulletins" class="toc-link">7. Bulletins & Resources</a></li>
+        <li><a href="#settings" class="toc-link">8. Settings & Database</a></li>
+        <li><a href="#shortcuts" class="toc-link">9. Keyboard Shortcuts</a></li>
+        <li><a href="#deployment" class="toc-link">10. Cloud & Cloudflare</a></li>
+      </ul>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="content-area">
+
+      <!-- 1. Overview -->
+      <section id="overview" class="guide-card">
+        <h2>1. Overview & Core Philosophy</h2>
+        <p>
+          The <strong>Engineering Task & Work Manager</strong> is a high-density, professional deliverable management platform engineered specifically for offshore oil & gas, EPC (Engineering, Procurement, Construction) projects, and multidisciplinary design teams.
+        </p>
+
+        <div class="grid-2">
+          <div class="feature-box">
+            <h4>💾 100% Local SQLite Ownership</h4>
+            <p>Runs directly with an embedded SQLite database (<code>data/app.db</code>) persisted to disk. No complex database servers or cloud setups required.</p>
+          </div>
+          <div class="feature-box">
+            <h4>⚡ Zero-Jitter Desktop Density</h4>
+            <p>Every table row, status change, and discipline switch occurs with zero screen flicker and zero text shifting. Built for engineering speed.</p>
+          </div>
+          <div class="feature-box">
+            <h4>👥 Multidisciplinary Interfaces</h4>
+            <p>Native tracking of interface disciplines: Process, Piping, Mechanical, Electrical, Instrumentation, Structural, Safety, Pipeline, EMT, and PMT.</p>
+          </div>
+          <div class="feature-box">
+            <h4>📅 1-Click MS Teams Integration</h4>
+            <p>Right-click any date on the calendar to schedule MS Teams meetings with a direct 1-click Join link for all team members.</p>
+          </div>
+        </div>
+
+        <div class="callout callout-info">
+          <strong>Language Discipline:</strong> All application UI labels, tables, dialogs, charts, and notifications are 100% strictly in technical English. The built-in AI technical assistant can converse with users in Vietnamese while maintaining English technical terminology.
+        </div>
+      </section>
+
+      <!-- 2. Dashboard -->
+      <section id="dashboard" class="guide-card">
+        <h2>2. Executive Dashboard & Critical Focus Items</h2>
+        <p>The Dashboard provides high-level project visibility across all contract deliverables:</p>
+
+        <h3>Executive KPI Cards</h3>
+        <ul>
+          <li><strong>Total Engineering Tasks:</strong> Total deliverables matching active project or package filters.</li>
+          <li><strong>Overall Schedule Progress:</strong> Aggregated weighted % completion.</li>
+          <li><strong>Overdue Actions:</strong> Deliverables requiring urgent expediting (flame indicator).</li>
+          <li><strong>High Priority Deliverables:</strong> Scopes flagged as Critical or High priority.</li>
+        </ul>
+
+        <h3>Synchronized "Critical Focus Items" Table</h3>
+        <p>
+          Section <strong>03. Critical Focus Items</strong> on the Dashboard is synchronized with the Master Task List:
+        </p>
+        <div class="step-item">
+          <div class="step-number">1</div>
+          <div class="step-text">
+            <strong>5 Interactive Metric Cards (Pills)</strong>
+            Click on <code>All Items</code>, <code>In Progress</code>, <code>Waiting / Review</code>, <code>Overdue Items</code>, or <code>Completed</code> to immediately filter the table with zero screen reload.
+          </div>
+        </div>
+        <div class="step-item">
+          <div class="step-number">2</div>
+          <div class="step-text">
+            <strong>Full Filter Toolbar & Search</strong>
+            Instant text search across titles, descriptions, and package codes, plus quick filters: <code>All</code>, <code>Due Today</code>, <code>Overdue</code>, <code>This Week</code>, and <code>Done</code>.
+          </div>
+        </div>
+        <div class="step-item">
+          <div class="step-number">3</div>
+          <div class="step-text">
+            <strong>Top Action Buttons</strong>
+            Direct access to <span class="badge-pill pill-blue">+ New Task</span>, <span class="badge-pill pill-green">Export Excel</span>, and <code>Print List</code>. When filters are active, a <code>Reset Filters</code> button automatically appears.
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. Master Task List Table -->
+      <section id="tasklist" class="guide-card">
+        <h2>3. Master Task List Grid & Inline Editing</h2>
+        <p>The Master Task List (<code>TaskListView.tsx</code>) provides a dense engineering grid with zero-refresh inline editing:</p>
+
+        <h3>Table Columns & Inline Controls</h3>
+        <ul>
+          <li><strong>Checkbox:</strong> Selects rows for floating batch operations (Batch Status, Batch Priority, Batch Delete).</li>
+          <li><strong>Priority:</strong> Dropdown badge (<span class="badge-pill pill-rose">CRITICAL</span>, <span class="badge-pill pill-amber">HIGH</span>, <span class="badge-pill pill-blue">MEDIUM</span>, <code>LOW</code>).</li>
+          <li><strong>Status:</strong> State machine controlled (<span class="badge-pill pill-blue">IN PROGRESS</span>, <span class="badge-pill pill-amber">WAITING</span>, <span class="badge-pill pill-green">DONE</span>, <code>TODO</code>).</li>
+          <li><strong>Task Title & Scope:</strong> Single-click to select row with rounded blue border; double-click or press <kbd>Enter</kbd> to open Task Details Modal.</li>
+          <li><strong>Project & Package:</strong> Tag identifying the EPC contract and procurement package code.</li>
+          <li><strong>PIC (Persons In Charge):</strong> Up to 3 overlapping circular avatars. Click to open the multi-select assignment popup with instant search and inline member creation.</li>
+          <li><strong>Discipline:</strong> Inline selector with disciplinary colors (Instrument, Process, Piping, Mechanical, Electrical, Structural, etc.). Updates optimistically with zero screen flicker!</li>
+          <li><strong>Target Deadline & Forecast Finish:</strong> Tracks initial commitment vs forecast finish dates and variance.</li>
+          <li><strong>Progress:</strong> Compact percentage indicator.</li>
+          <li><strong>Actions:</strong> Quick toggle complete (✓) and delete (🗑️).</li>
+        </ul>
+
+        <div class="callout callout-success">
+          <strong>Authoritative State Machine:</strong> Marking a task as <code>DONE</code> automatically sets progress to 100% and stamps <code>completed_date</code>. Reverting from <code>DONE</code> to <code>WAITING</code> caps progress at 50% and clears <code>completed_date</code>.
+        </div>
+      </section>
+
+      <!-- 4. Calendar & MS Teams -->
+      <section id="calendar" class="guide-card">
+        <h2>4. Deadlines Calendar & MS Teams Meetings</h2>
+        <p>The Calendar View provides a comprehensive monthly timeline mapping task deadlines and scheduled engineering review sessions.</p>
+
+        <h3>Scheduling MS Teams Meetings</h3>
+        <div class="step-item">
+          <div class="step-number">1</div>
+          <div class="step-text">
+            <strong>Right-Click on Any Calendar Day</strong>
+            Right-click (or secondary click) on any date cell to summon the context menu:
+            <ul style="margin-top: 6px;">
+              <li>📹 <strong>Add MS Teams Meeting</strong>: Opens the meeting scheduler with the date preselected.</li>
+              <li>📋 <strong>Add New Task</strong>: Creates a new deliverable with deadline pre-filled.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="step-item">
+          <div class="step-number">2</div>
+          <div class="step-text">
+            <strong>Fill in Meeting Details</strong>
+            Enter Meeting Title, Date, Start/End Time, All-Day toggle, Room/Location, Organizer, Agenda notes, and the <strong>MS Teams Meeting Link (URL)</strong>.
+          </div>
+        </div>
+        <div class="step-item">
+          <div class="step-number">3</div>
+          <div class="step-text">
+            <strong>1-Click Direct Join</strong>
+            Meeting cards on the calendar display an MS Teams icon. If a meeting link is present, a blue <span class="badge-pill pill-indigo">Join</span> button appears directly on the card. Click it to enter the meeting immediately in a new browser tab.
+          </div>
+        </div>
+
+        <div class="callout callout-teams">
+          <strong>Corporate Security Friendly:</strong> Does not require company Azure Active Directory administrator consent or external calendar permissions. All meetings are saved locally in the SQLite database and can be edited or deleted anytime.
+        </div>
+      </section>
+
+      <!-- 5. My Work Workspace -->
+      <section id="mywork" class="guide-card">
+        <h2>5. My Personal Workspace</h2>
+        <p>
+          Dedicated view (<code>MyWorkView.tsx</code>) isolating deliverables assigned to the currently selected engineer.
+        </p>
+        <ul>
+          <li><strong>Overdue Deliverables:</strong> Highest urgency items sorted by earliest overdue date.</li>
+          <li><strong>Due Today & Due This Week:</strong> Imminent milestone deliverables.</li>
+          <li><strong>Active Scopes:</strong> In-progress deliverables requiring engineering attention.</li>
+          <li><strong>Completed Recently:</strong> Archive of finished deliverables for monthly progress reports.</li>
+        </ul>
+      </section>
+
+      <!-- 6. Projects & Packages -->
+      <section id="projects" class="guide-card">
+        <h2>6. Engineering Projects & Procurement Packages</h2>
+        <p>
+          Structured hierarchy ensuring relational integrity across deliverables:
+        </p>
+        <div class="grid-2">
+          <div class="feature-box">
+            <h4>🏢 Engineering Projects</h4>
+            <p>Defines EPC contracts (e.g., Block B CPP, Lac Da Vang WHP-A, White Tiger Compression). Tracks client names, contract status, and overall project progress.</p>
+          </div>
+          <div class="feature-box">
+            <h4>📦 Procurement Packages</h4>
+            <p>Subdivides projects into equipment and fabrication bid packages (e.g., PRJ-B01 Gas Turbines, PRJ-B04 ESD Ball Valves). Strictly linked to parent projects.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 7. Bulletins & Resources -->
+      <section id="bulletins" class="guide-card">
+        <h2>7. Technical Bulletins & Engineering Resources Portal</h2>
+        <p>
+          Centralized engineering document repository and fast-link launcher (<code>BulletinsView.tsx</code>).
+        </p>
+        <ul>
+          <li><strong>Project Partitioning:</strong> Filter documents by <code>All Projects</code> or click on any specific project code tab.</li>
+          <li><strong>Dynamic Tab Counts:</strong> Badges displaying item counts for <code>ALL</code>, <code>PINNED</code>, <code>SHEETS</code>, <code>DOCS</code>, <code>SHAREPOINT</code>, <code>NETWORK</code>, <code>LOCAL</code>, <code>WEB</code>, and <code>DUE REVIEW</code>.</li>
+          <li><strong>Review Governance:</strong> Resources nearing their review expiration are tagged with amber <code>Due Review</code> alerts.</li>
+          <li><strong>Technical Announcements:</strong> Pinned notices and bulletin transmittals for engineering team leads.</li>
+        </ul>
+      </section>
+
+      <!-- 8. Settings & Database -->
+      <section id="settings" class="guide-card">
+        <h2>8. Workspace Settings & Database Backup</h2>
+        <p>
+          Manage workspace preferences and SQLite database maintenance in <code>SettingsView.tsx</code>:
+        </p>
+        <ul>
+          <li><strong>Engineer Profile:</strong> Select or switch your active engineer profile.</li>
+          <li><strong>Persons In Charge (PIC):</strong> Manage project team members. <em>Click directly on the circular avatar photo</em> to upload or replace photos instantly!</li>
+          <li><strong>Theme & Appearance:</strong> Toggle Light / Dark mode, customize workspace title, acronym, and brand header gradient.</li>
+          <li><strong>AI Configuration:</strong> Configure Google Gemini API keys, provider failover, and technical prompt presets.</li>
+          <li><strong>Database Backup & Restore:</strong>
+            <ul style="margin-top: 4px;">
+              <li>Click <strong>Download Database (.sqlite)</strong> to save a complete backup binary file to your computer.</li>
+              <li>Use <strong>Import Database</strong> to restore an existing SQLite backup anytime.</li>
+            </ul>
+          </li>
+        </ul>
+      </section>
+
+      <!-- 9. Keyboard Shortcuts -->
+      <section id="shortcuts" class="guide-card">
+        <h2>9. Productivity & Keyboard Shortcuts</h2>
+        <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+          <thead>
+            <tr style="border-bottom: 2px solid var(--border-color); text-align: left; font-size: 12px; color: var(--text-muted);">
+              <th style="padding: 8px;">Key Shortcut</th>
+              <th style="padding: 8px;">Context</th>
+              <th style="padding: 8px;">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-bottom: 1px solid var(--border-color);">
+              <td style="padding: 8px;"><kbd>↓</kbd> / <kbd>↑</kbd></td>
+              <td style="padding: 8px;">Task List Grid</td>
+              <td style="padding: 8px;">Select next / previous deliverable with smooth scrolling</td>
+            </tr>
+            <tr style="border-bottom: 1px solid var(--border-color);">
+              <td style="padding: 8px;"><kbd>Enter</kbd></td>
+              <td style="padding: 8px;">Task List Grid</td>
+              <td style="padding: 8px;">Open Task Details Modal for the active deliverable</td>
+            </tr>
+            <tr style="border-bottom: 1px solid var(--border-color);">
+              <td style="padding: 8px;"><kbd>Esc</kbd></td>
+              <td style="padding: 8px;">Modals & Calendar</td>
+              <td style="padding: 8px;">Close active modal or dismiss right-click context menu</td>
+            </tr>
+            <tr style="border-bottom: 1px solid var(--border-color);">
+              <td style="padding: 8px;"><kbd>Mouse Wheel</kbd></td>
+              <td style="padding: 8px;">Calendar Grid</td>
+              <td style="padding: 8px;">Scroll backward / forward by 1 week per scroll tick</td>
+            </tr>
+            <tr style="border-bottom: 1px solid var(--border-color);">
+              <td style="padding: 8px;"><strong>Right-Click</strong></td>
+              <td style="padding: 8px;">Calendar Day Cell</td>
+              <td style="padding: 8px;">Open context menu to add MS Teams meeting or new task</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- 10. Deployment -->
+      <section id="deployment" class="guide-card">
+        <h2>10. Cloud Deployment & Cloudflare Guide</h2>
+        <p>
+          How to host the web application for 24/7 global accessibility:
+        </p>
+
+        <h3>Option A: Cloudflare Tunnel (Recommended — Free & Secure)</h3>
+        <p>Exposes your running application to the internet through Cloudflare without open ports or firewall changes:</p>
+        <pre># 1. Start application locally
+npm run build && npm start
+
+# 2. In another terminal, run Cloudflare Tunnel
+cloudflared tunnel --url http://localhost:3000</pre>
+        <p>Cloudflare generates a secure HTTPS URL (e.g. <code>https://your-tunnel.trycloudflare.com</code>) that can be opened anywhere.</p>
+
+        <h3>Option B: Automated Cloud Hosting (Render.com + Cloudflare DNS)</h3>
+        <ol>
+          <li>Push your repository to GitHub.</li>
+          <li>Log into <strong>Render.com</strong> using GitHub and create a <strong>New Web Service</strong>.</li>
+          <li>Set Build Command to <code>npm run build</code> and Start Command to <code>npm start</code>.</li>
+          <li>In Cloudflare DNS, add a CNAME record pointing your custom domain to Render with the orange proxy cloud enabled (🟠 Proxied).</li>
+        </ol>
+
+        <h3>Option C: Docker Container</h3>
+        <p>A multi-stage production <code>Dockerfile</code> is included in the root directory:</p>
+        <pre>docker build -t task-manager .
+docker run -d -p 3000:3000 -v $(pwd)/data:/app/data --name task-app task-manager</pre>
+      </section>
+
+    </main>
+  </div>
+
+  <footer>
+    <p>Engineering Task & Work Manager &copy; 2026. Designed for EPC & Offshore Engineering Excellence.</p>
+  </footer>
+
+</body>
+</html>

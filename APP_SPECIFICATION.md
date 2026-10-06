@@ -2,7 +2,7 @@
 
 > **Document Type**: Comprehensive Architectural & Functional Specification (Vibe-Coding Ready)  
 > **Target LLMs / Code Engines**: Claude 3.7 Sonnet / Cursor / GitHub Copilot / Gemini  
-> **Version**: 1.4.0  
+> **Version**: 1.5.0  
 > **Target Platform**: Responsive Web Single-Page Application (SPA) / Local Hybrid Execution  
 > **Default Port**: 3000  
 > **Database Engine**: Local Persistent SQLite via WebAssembly (`sql.js`)  
@@ -21,7 +21,7 @@
 3. **Zero-Flick, Dense Engineering UI**: Professional desktop-density layout featuring instantaneous row selection without text shifting or layout jumping, inline progress adjustment sliders, keyboard navigation ($\uparrow$ / $\downarrow$ / `Enter`), sticky filter toolbars, and synchronized dark/light theme tokens.
 4. **Authoritative Task State Machine & Data Integrity**: Single source of truth for task lifecycle transitions (`normalizeTaskState`) eliminating status/progress divergence across all client modals, quick edit rows, bulk operations, and backend endpoints. Strict relational validation guarantees packages belong to their parent projects.
 5. **Atomic Transactions & Storage Consistency**: All multi-mutation operations (task creation, updates, linked group synchronization, comment additions, batch actions, file deletions) execute within atomic SQLite transactions with automatic rollback and single-flush disk persistence.
-6. **Bidirectional Microsoft Outlook 365 Sync**: Integrates with Microsoft Graph REST API to synchronize task deadlines, review meetings, and milestones directly with user Outlook calendars.
+6. **Integrated MS Teams Meetings & Interactive Calendar Timelines**: Replaced external cloud-restricted Outlook sync with direct Microsoft Teams meeting management. Engineers can right-click any calendar day to schedule a meeting with a join link, launch video calls via 1-click Join buttons, and manage project milestone reviews locally with zero external sync failures or IT policy blocks.
 7. **Multi-Model Engineering AI Copilot & Resilient Tier Isolation**: Context-aware assistant powered by `@google/genai` (Gemini 3.8 Flash, Gemini 3.1 Flash Lite) and Anthropic Claude (Claude 3.7 Sonnet, 3.5 Sonnet/Haiku). Features transparent active model identification, dynamic fallback badge indicators on temporary Google Cloud demand spikes (HTTP 503), and clickable task shortcut tokens.
 
 ---
@@ -68,6 +68,9 @@
 ├── server.ts                   # Express server entry point mounting Vite middlewares
 ├── metadata.json               # Applet metadata, capabilities and permissions
 │
+├── public/                     # Static web assets & documentation
+│   └── user-guide.html         # Interactive standalone HTML User Manual with search & deployment guide
+│
 ├── data/                       # Local disk storage directory (Auto-created)
 │   ├── app.db                  # Persisted SQLite binary database file
 │   └── uploads/                # Physical uploaded attachments (Drawings, PDFs, Specs)
@@ -88,7 +91,7 @@
 │       ├── attachments.ts      # Multi-part file upload, metadata storage, download, orphan cleanup
 │       ├── system.ts           # SQLite export/download, import/restore, and reset logic
 │       ├── ai.ts               # Gemini & Claude prompt routing, resilient fallback, and technical chat
-│       └── outlook.ts          # Microsoft Graph OAuth tokens, event sync, and calendar webhooks
+│       └── outlook.ts          # MS Teams & calendar meetings CRUD, event caching & management
 │
 ├── src/                        # Frontend React Application
 │   ├── main.tsx                # React DOM entry point
@@ -112,7 +115,7 @@
 │   ├── components/             # Modular UI Components
 │   │   ├── layout/
 │   │   │   ├── Navbar.tsx      # Top global navigation bar (Search, New Task, User selector, Theme)
-│   │   │   ├── Sidebar.tsx     # Collapsible navigation drawer with view counters
+│   │   │   ├── Sidebar.tsx     # Collapsible navigation drawer with view counters & User Guide link
 │   │   │   └── PageHeader.tsx  # Unified 62px header banner component
 │   │   ├── tasks/
 │   │   │   ├── TaskListTable.tsx    # Dense master task table with zero-flick inline editing
@@ -121,8 +124,8 @@
 │   │   │   ├── BatchActionBar.tsx   # Floating bulk operations toolbar (Status, Priority, Delete)
 │   │   │   └── PrintPreviewModal.tsx# Printable document preview modal with pagination
 │   │   ├── calendar/
-│   │   │   ├── OutlookSyncModal.tsx # Azure OAuth & synchronization setup modal
-│   │   │   └── OutlookEventModal.tsx# Outlook calendar event inspection modal
+│   │   │   ├── MeetingModal.tsx     # MS Teams & review meeting scheduler dialog with Teams link
+│   │   │   └── OutlookEventModal.tsx# Meeting inspector dialog with 1-click Join MS Teams button
 │   │   ├── common/
 │   │   │   ├── DatePicker.tsx       # Compact calendar date selector component
 │   │   │   ├── Badge.tsx            # Standardized status, priority, and discipline badges
@@ -137,7 +140,7 @@
 │       ├── MyWorkView.tsx      # Personal prioritized task list for active logged-in engineer
 │       ├── ProjectsView.tsx    # Engineering projects list, metadata, progress cards
 │       ├── PackagesView.tsx    # Procurement package deliverable tracker with vendor status
-│       ├── CalendarView.tsx    # Month/week interactive calendar with Outlook event overlay
+│       ├── CalendarView.tsx    # Month/week interactive calendar with right-click menu & MS Teams meetings
 │       ├── BulletinsView.tsx   # Engineering bulletins, documents & URL portal per project
 │       ├── TagsView.tsx        # Tag management and task reference counters
 │       ├── SettingsView.tsx    # Multi-tab workspace settings
@@ -450,11 +453,16 @@ All major views must feature a consistent 62px-height top banner adhering to the
   - *Discipline Breakdown*: Stacked/Bar chart illustrating tasks distributed across Mechanical, Piping, Electrical, Structural, and Process.
   - *Status Donut Chart*: Visual progress share.
 - **Critical Focus Items Table (`TaskListTable.tsx`)**:
-  - Exactly synchronizes layout, columns, and interactive functionality with Master Task List (`TaskListTable`).
-  - Displays high-priority and urgent focus deliverables with zero-jitter blue selection box, keyboard navigation ($\uparrow$ / $\downarrow$ / `Enter`), and multi-select checkboxes.
-  - Full inline editing without opening modals: Status (`TODO`, `IN PROGRESS`, `WAITING`, `DONE`), Priority (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`), Progress slider (0–100%), and Interface Discipline selector.
-  - Multi-column sortable headers (including Interface sort, Priority, Status, Deadline, and Forecast).
-  - Synchronized column-level filters (Status, Priority, Discipline, Deadline, Forecast).
+  - Full feature and layout parity with Master Task List (`TaskListTable`).
+  - **5 Metric / Status Quick Filter Cards**: Positioned directly above the filter toolbar:
+    1. *All Focus*: Total count of critical deliverables.
+    2. *In Progress*: Active deliverables currently under engineering design.
+    3. *Waiting / Review*: Deliverables awaiting vendor/client comments.
+    4. *Overdue*: Critical deliverables past due date (amber/red pulse indicator).
+    5. *Completed*: Finished critical deliverables.
+  - **Full Search & Filter Toolbar**: Search box with instant filter, Quick status filters (`All`, `Due Today`, `Overdue`, `This Week`, `Done`), plus dropdowns for Status, Priority, and Interface Discipline.
+  - **Action Header Controls**: Dedicated "New Task" button to register deliverables, "Print List" preview modal launcher, and matching deliverable badge counter.
+  - **Optimized SQL Backend**: `server/routes/dashboard.ts` returns tags and multidisciplinary interfaces for urgent focus items so interface disciplines render cleanly and filter instantly with zero layout jump.
 - **Bulletins & Resources Quick Access Widget**:
   - Dashboard widget presenting Pinned Fast Links and resources requiring review (`Due Review` counter badge).
   - Direct 1-click navigation to explore all technical bulletins and project resources.
@@ -507,10 +515,15 @@ All major views must feature a consistent 62px-height top banner adhering to the
 - Manages equipment and procurement scopes (e.g., Gas Turbine Generators, WHP Structural Steel, Subsea Valves).
 - Direct link to tasks scoped under each specific package code.
 
-#### View 6: Engineering Calendar & Outlook 365 (`CalendarView.tsx`)
-- **Header**: Icon `<Calendar>`, Title: `DEADLINES & CALENDAR TIMELINES`, Subtitle: `MILESTONES, REVIEWS & OUTLOOK 365 SYNC`.
-- Interactive Month / Week / Day views plotting task deadlines and Outlook events.
-- Modal to trigger manual or automatic sync with Microsoft Graph API.
+#### View 6: Engineering Calendar & MS Teams Timelines (`CalendarView.tsx`)
+- **Header**: Icon `<Calendar>`, Title: `DEADLINES & CALENDAR TIMELINES`, Subtitle: `PROJECT MILESTONES, REVIEWS & MS TEAMS MEETINGS`.
+- **Interactive Month / Week Views**: Dynamic timeline grid showing deliverable deadline pills and MS Teams meeting tags.
+- **Right-Click Context Menu**: Right-click on any day cell to open a context action menu:
+  1. *Add MS Teams Meeting*: Pre-populates the selected date in `MeetingModal` to schedule technical reviews, vendor clarifications, or HAZOP workshops with meeting URL.
+  2. *Create Task*: Opens `QuickTaskModal` with deadline automatically set to the clicked date.
+- **1-Click MS Teams Join Button**: Meetings with video URLs display a direct "Join" button on the calendar card and within `OutlookEventModal.tsx`, launching the call immediately in Microsoft Teams.
+- **Mouse Wheel Timeline Scroll**: Smooth mouse wheel scroll transitions backward / forward by 1 week per scroll event.
+- **Local Autonomy**: Completely replaces restricted external cloud Outlook sync with self-contained meeting management, overcoming enterprise tenant security and firewall blocks.
 
 #### View 7: AI Technical Assistant (`AIChatBubble.tsx`)
 - 3D animated floating assistant avatar located at the bottom-right corner.
@@ -632,8 +645,13 @@ All endpoints are hosted under the `/api` prefix.
   - Employs automated resilient failover within provider tier if the primary model encounters temporary `503` demand spikes.
   - *Response*: `{ reply: string, modelUsed: string, isFallback: boolean, provider: string, timestamp: string }`.
 - `POST /api/ai/reword-description`: Refines raw engineering draft notes into concise technical descriptions adhering to EPC standards.
-- `GET /api/outlook/status`: Returns current Microsoft Graph connection status and user email.
-- `POST /api/outlook/sync`: Initiates calendar event fetch and syncs due dates with Outlook 365.
+- `GET /api/outlook/events`: Query parameters: `startDate`, `endDate`. Returns scheduled meetings within the calendar window.
+- `POST /api/outlook/events`: Creates a new calendar meeting or MS Teams session.
+  - *Payload*: `{ subject: string, body_preview?: string, start_time: string, end_time: string, location?: string, web_link?: string, is_all_day?: boolean }`.
+  - *Response*: `{ success: true, event: OutlookEvent }`.
+- `PUT /api/outlook/events/:id`: Updates meeting title, timings, notes, location, or MS Teams URL.
+- `DELETE /api/outlook/events/:id`: Removes a scheduled meeting from the persistent database.
+- `GET /api/outlook/status`: Returns current calendar and MS Teams service operational status.
 
 ---
 
@@ -659,8 +677,9 @@ Whenever code modifications or feature enhancements occur:
 
 ---
 
-## 8. Verification & Execution Instructions
+## 8. Verification, Execution & Cloudflare Deployment
 
+### 8.1 Local Execution & Automated Verification
 ```bash
 # 1. Install all dependencies
 npm install
@@ -680,6 +699,45 @@ npm test
 # 6. Start production server
 npm start
 ```
+
+### 8.2 Cloudflare & 24/7 Global Access Architecture
+Because this application is a full-stack Node.js Express server with a local persistent SQLite database (`data/app.db`) and disk-based file attachments (`data/uploads/`), deploying it for 24/7 global accessibility requires retaining backend persistence.
+
+#### Option A: Cloudflare Tunnel (`cloudflared`) — Recommended (Zero-Cost & 100% Data Privacy)
+- **Concept**: Cloudflare Tunnel connects your local workstation, office server, or private mini-PC to Cloudflare's global network without opening inbound firewall ports or configuring public IP/router port forwarding.
+- **Workflow**:
+  1. Build and run the app:
+     ```bash
+     npm run build && npm start
+     ```
+  2. In a separate terminal or service, install and launch Cloudflare Tunnel:
+     ```bash
+     # Quick zero-config tunnel (Generates instant HTTPS public link)
+     cloudflared tunnel --url http://localhost:3000
+     ```
+  3. For permanent custom domains (e.g. `https://tasks.yourdomain.com`):
+     - Authenticate: `cloudflared tunnel login`
+     - Create tunnel: `cloudflared tunnel create engineering-app`
+     - Route DNS: `cloudflared tunnel route dns engineering-app tasks.yourdomain.com`
+     - Run: `cloudflared tunnel run --url http://localhost:3000 engineering-app`
+- **Benefits**: Completely free, SSL automatically issued/renewed by Cloudflare, zero firewall risks, 100% local database sovereignty.
+
+#### Option B: GitHub Auto-Deploy (Render / Railway / VPS) + Cloudflare DNS Proxy
+- **Workflow**:
+  1. Push your code to GitHub.
+  2. Create a free/low-cost Web Service on **Render.com** or **Railway.app** linked to your GitHub repository.
+     - Build Command: `npm run build`
+     - Start Command: `npm start`
+     - Add a persistent disk mounted at `/app/data` to preserve `app.db`.
+  3. In **Cloudflare Dashboard**: Add a CNAME record pointing your domain or subdomain to the service host with Cloudflare Proxy turned ON (🟠 Proxied) for global CDN caching, SSL, and DDoS mitigation.
+
+#### Option C: Production Docker Container Behind Cloudflare
+- Build container:
+  ```bash
+  docker build -t engineering-task-manager .
+  docker run -d -p 3000:3000 -v $(pwd)/data:/app/data --name task-app --restart always engineering-task-manager
+  ```
+- Expose via `cloudflared` or Nginx reverse proxy with Cloudflare SSL certificate.
 
 ---
 
@@ -762,6 +820,23 @@ npm start
     - Bổ sung thanh điều hướng phân loại tài nguyên kỹ thuật theo từng dự án (`Projects: All Projects, [Project Codes]`) đồng bộ tự động theo các dự án đã tạo trong hệ thống.
     - Hiển thị badge số lượng tài nguyên (item count) trực quan trên từng tab danh mục (All, Pinned, Google Sheets, Google Docs, Network, Web Links, Vendor, Due Review) lấy từ `tabCounts` backend.
     - Tích hợp widget truy cập nhanh Bulletins trên Dashboard hiển thị Pinned Fast Links và tài nguyên đến hạn review.
+17. **Integrated MS Teams Meetings & Interactive Calendar Context Menu (Replaced Restricted Outlook Sync)**:
+    - Gỡ bỏ hoàn toàn tính năng và các nút bấm đồng bộ Outlook 365 bên ngoài (do chính sách tường lửa bảo mật và hạn chế quyền Tenant của doanh nghiệp đối với ứng dụng bên ngoài).
+    - Thay thế bằng hệ thống quản trị cuộc họp Microsoft Teams và lịch kỹ thuật nội bộ trực tiếp:
+      - Chuột phải (Right-Click) vào bất kỳ ngày nào trên lưới lịch để mở Context Menu: `Add MS Teams Meeting` hoặc `Create Task`.
+      - Tích hợp modal tạo/sửa cuộc họp `MeetingModal.tsx` với đường dẫn MS Teams meeting URL, thời gian bắt đầu/kết thúc, ghi chú kỹ thuật và địa điểm.
+      - Nút bấm 1-click **Join** trực tiếp trên thẻ cuộc họp trên lịch và trong modal chi tiết `OutlookEventModal.tsx` giúp kỹ sư tham gia cuộc họp Teams ngay tức khắc.
+      - Hỗ trợ cuộn chuột lăn mượt mà điều hướng lùi/tiến từng tuần trên lịch.
+      - Cung cấp trọn vẹn API CRUD `/api/outlook/events` (GET, POST, PUT, DELETE) lưu trữ bền vững trong SQLite.
+18. **Dashboard "Critical Focus Items" Complete Feature Parity with Master Task Table**:
+    - Bổ sung 5 thẻ lọc nhanh chỉ số (Metric/Status Filter Cards: *All Focus*, *In Progress*, *Waiting/Review*, *Overdue*, *Completed*) ngay phía trên thanh công cụ lọc của "Critical Focus Items".
+    - Đồng bộ thanh công cụ lọc chuẩn: Ô tìm kiếm tức thì, các nút lọc nhanh (*All*, *Due Today*, *Overdue*, *This Week*, *Done*), và các dropdown lọc Trạng thái (Status), Độ ưu tiên (Priority), Bộ môn giao diện (Interface Discipline).
+    - Bổ sung nút bấm trực tiếp `New Task` (mở modal tạo công việc) và `Print List` (mở modal xem trước trang in A4) cùng badge đếm tổng số deliverable phù hợp.
+    - Nâng cấp câu lệnh SQL `urgentTasksSql` trong `server/routes/dashboard.ts` truy vấn kèm toàn bộ Tags và Multidisciplinary Interfaces cho các task trọng tâm, giúp hiển thị đầy đủ bộ môn và lọc mượt mà không cần tải lại trang.
+19. **Interactive HTML User Guide (`/public/user-guide.html`) & Cloudflare Deployment Guide**:
+    - Xây dựng file HTML hướng dẫn sử dụng chuyên nghiệp, độc lập tại `/public/user-guide.html`, có thể mở trực tiếp từ trình duyệt (`http://<host>:3000/user-guide.html`) hoặc từ nút `USER GUIDE` trên Sidebar.
+    - Giao diện tài liệu hiện đại, có mục lục tương tác, thanh tìm kiếm từ khóa, hướng dẫn chi tiết từng phân hệ (Dashboard, Task List, Dự án, Gói thầu, Lịch & MS Teams, Bulletins, AI Assistant, Sao lưu SQLite).
+    - Hướng dẫn chi tiết các phương án đưa ứng dụng lên Cloudflare để truy cập toàn cầu 24/7 (Cloudflare Tunnel `cloudflared`, VPS/Render + Cloudflare DNS Proxy, Docker).
 
 ### 9.2 In Progress & Verification (Đang hoàn thiện & Theo dõi)
 1. **Modal Form PIC Consistency**:
